@@ -35,6 +35,12 @@ diff = qbase.rotation_difference(qsource)
 
 print("DIF: " , diff.to_euler())
 
+
+qsource2 = source.data.bones['RightElbow'].matrix_local.to_quaternion()
+qbase2 = base.data.bones['RightElbow'].matrix_local.to_quaternion()
+diff2 = diff.conjugated() *  qbase2.rotation_difference(qsource2)
+
+
 # for i,fcurve in enumerate(source.animation_data.action.fcurves):
 # 	target_curve = base.animation_data.action.fcurves[i]
 # 		for keypoint in fcurve.keyframe_points:
@@ -46,7 +52,13 @@ base.data.pose_position = 'POSE'
 for i,keypoint in enumerate(source.animation_data.action.fcurves[0].keyframe_points):
 	C.scene.frame_set(keypoint.co[0])
 	base.pose.bones['RightShoulder'].rotation_quaternion = diff * source.pose.bones['RightShoulder'].rotation_quaternion
+	base.pose.bones['RightElbow'].rotation_quaternion = diff2 * source.pose.bones['RightElbow'].rotation_quaternion
+	
 	base.keyframe_insert('pose.bones["RightShoulder"].rotation_quaternion',
+		index=-1, 
+		frame=bpy.context.scene.frame_current, group="")
+
+	base.keyframe_insert('pose.bones["RightElbow"].rotation_quaternion',
 		index=-1, 
 		frame=bpy.context.scene.frame_current, group="")
 	
