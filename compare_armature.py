@@ -13,6 +13,9 @@ D= bpy.data
 
 #If multivalue property, index of the value modified by fcurve
 #C.object.animation_data.action.fcurves[7].array_index
+#
+#Insert keyframe        
+#D.objects['Suzanne'].keyframe_insert("rotation_quaternion",index=-1, frame=bpy.context.scene.frame_current, group="Rotation")
 
 
 source = D.objects['SOURCE']
@@ -31,6 +34,23 @@ print("BASE: " , qbase)
 diff = qbase.rotation_difference(qsource)
 
 print("DIF: " , diff.to_euler())
+
+# for i,fcurve in enumerate(source.animation_data.action.fcurves):
+# 	target_curve = base.animation_data.action.fcurves[i]
+# 		for keypoint in fcurve.keyframe_points:
+
+source.data.pose_position = 'POSE'
+base.data.pose_position = 'POSE'
+
+
+for i,keypoint in enumerate(source.animation_data.action.fcurves[0].keyframe_points):
+	C.scene.frame_set(keypoint.co[0])
+	base.pose.bones['RightShoulder'].rotation_quaternion = diff * source.pose.bones['RightShoulder'].rotation_quaternion
+	base.keyframe_insert('pose.bones["RightShoulder"].rotation_quaternion',
+		index=-1, 
+		frame=bpy.context.scene.frame_current, group="")
+	
+
 
 # base.data.edit_bones['RightShoulder'].transform(diff.to_matrix())
 
