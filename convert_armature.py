@@ -54,6 +54,8 @@ class Armature_converter:
 			global omit
 			if not omit:
 				print(b_target.parent , " " , b_target, "  ", b_target.parent.diff_quat.conjugated())
+			b_target.abs_diff_quat =  b_target.abs_diff_quat * b_target.parent.abs_diff_quat.conjugated()
+
 			b_target.diff_quat = b_target.parent.abs_diff_quat.conjugated() * b_target.abs_diff_quat
 
 
