@@ -35,13 +35,19 @@ source = D.objects['SOURCE']
 # 	a.rotate(parent.matrix)
 # 	a *= Matrix().Translation(parent.tail)
 
-txt = "RightElbow"
+txt = "RightShoulder"
 parents = source.pose.bones[txt].parent_recursive.copy()
 parents.reverse()
 q = Quaternion()
 q.identity()
 for parent in parents:
+	# last_q = q
 	q *=  source.data.bones[parent.name].matrix.to_quaternion() * parent.rotation_quaternion
+
+	# local_q = q * last_q.conjugated()
+
+	print("{:20} global: {} | local: {}".format( parent.name, q, parent.rotation_quaternion ) )
+
 	e = bpy.ops.object.empty_add(type='ARROWS', radius=0.3, view_align=False, 
 	location=  parent.tail, rotation= q.to_euler(),
 	layers=(True,) + (False,) * 19)
@@ -49,6 +55,20 @@ for parent in parents:
 	C.object.name = parent.name
 	C.object.show_name = True
 
+
+e = bpy.ops.object.empty_add(type='ARROWS', radius=0.3, view_align=False, 
+	location=  source.pose.bones[txt].tail, rotation= source.pose.bones[txt].matrix.to_euler(),
+	layers=(True,) + (False,) * 19)
+
+
+print("*"*20)
+print(source.pose.bones[txt].parent.matrix.to_quaternion().conjugated() * source.pose.bones[txt].matrix.to_quaternion() )
+print(source.pose.bones[txt].rotation_quaternion)
+
+
+print("*"*20)
+print(source.data.bones[txt].parent.matrix_local.to_quaternion().conjugated() * source.data.bones[txt].matrix_local.to_quaternion() )
+print(source.data.bones[txt].matrix.to_quaternion())
 
 # v = source.pose.bones[txt].head
 
