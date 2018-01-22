@@ -1,5 +1,11 @@
 import bpy
 from math import degrees
+from mathutils import Quaternion
+
+# TODO
+# -add root location, optionaly set root bone to 0
+# -mind the armature object rotation!
+# -parse the animation
 
 
 C= bpy.context
@@ -41,8 +47,13 @@ class Armature_converter:
 		self.source.data.pose_position = mode
 		self.target.data.pose_position = mode
 
-	def get_basebone(self):
-		basebone = [b for b in self.source.data.bones if b.parent is None]
+	def get_basebone(self, where="source"):
+		#ATTENTION!! source return data Bone, target returns PoseBone!
+		if where == "source":
+			basebone = [b for b in self.source.data.bones if b.parent is None]
+		else:
+			basebone = [b for b in self.target.pose.bones if b.parent is None]
+
 
 		if len(basebone) != 1:
 			raise Exception("The base armature has to have exactly one base bone")
@@ -51,39 +62,43 @@ class Armature_converter:
 
 		return basebone
 
+	def reset_pose(self):
+		a.get_basebone("target").rotation_quaternion.identity()
+		a.walk_bones(a.get_basebone("target"), lambda b: b.rotation_quaternion.identity())
 
-	def get_abs_diff(self, bone):
+	def get_diff(self, bone):
 		rot_bone =  bone.matrix.to_quaternion() 
-		# rot_bone = bone.matrix.to_quaternion()
 		other = self.target.data.bones[bone.name]
 		rot_other = other.matrix.to_quaternion()
-		# rot_other = other.matrix.to_quaternion()
 
-		diff = rot_bone.rotation_difference( rot_other )
+		bone.diff_quat = rot_bone.rotation_difference( rot_other )
 
-		# e = bpy.ops.object.empty_add(type='ARROWS', radius=0.3, view_align=False, 
-		# 	location=  self.source.pose.bones[bone.name].tail, rotation= (diff.conjugated()).to_euler(),
-		# 	layers=(True,) + (False,) * 19)
-
-		self.target.pose.bones[bone.name].rotation_quaternion *= diff.conjugated() * self.source.pose.bones[bone.name].rotation_quaternion
-		print("{:16} | {} | {}".format(bone.name, diff, diff.angle))
+	def set_pose_from_diff(self, bone):
+		self.target.pose \
+				.bones[bone.name] \
+				.rotation_quaternion *= bone.diff_quat.conjugated() \
+										* self.source.pose.bones[bone.name].rotation_quaternion
+		
+		print("{:16} | {} | {}".format(bone.name, bone.diff_quat, bone.diff_quat))
 	
 	
 	@staticmethod
 	def walk_bones(bone, handler):
-		# handler(bone)
 		for ch in bone.children:
-			# if ch.name == "RightShoulder": omit = False
 			handler(ch)
 			Armature_converter.walk_bones(ch, handler)
 
 a = Armature_converter('SOURCE','BASE')
-a.walk_bones(a.get_basebone(), a.get_abs_diff)
-a.set_poseposition()
-# a.debug(a.get_basebone())
-# a.walk_bones(a.get_basebone(), a.debug)
-# print("SECONDA PASSATA")
-# a.walk_bones(a.get_basebone(), a.set_relative_diff)
-# a.walk_bones(a.get_basebone(), a.get_diff_prop)
+a.reset_pose()
+a.walk_bones(a.get_basebone(), a.get_diff)
 
+a.set_pose_from_diff(a.get_basebone())
+a.walk_bones(a.get_basebone(), a.set_pose_from_diff)
+
+a.set_poseposition()
+
+
+# e = bpy.ops.object.empty_add(type='ARROWS', radius=0.3, view_align=False, 
+		# 	location=  self.source.pose.bones[bone.name].tail, rotation= (diff.conjugated()).to_euler(),
+		# 	layers=(True,) + (False,) * 19)
 
