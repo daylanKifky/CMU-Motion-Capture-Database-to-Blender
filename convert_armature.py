@@ -6,6 +6,8 @@ from mathutils import Quaternion
 # -parse the animation
 
 
+
+
 C= bpy.context
 D= bpy.data
 
@@ -31,12 +33,15 @@ class Armature_converter:
 			default=(0,0,0))
 	
 	def __init__(self, source, target):
-		self.source = D.objects['SOURCE']
-		self.target = D.objects['BASE']
+		self.source = D.objects[source]
+		self.target = D.objects[target]
 		self.root_translation = True
+		self.inherit_rotations = True
+		self.range = {"min" : 0, "max" : float("inf")}
 
 		self.set_poseposition("REST")
 
+		C.scene.objects.active = self.target
 		bpy.ops.object.mode_set(mode = 'POSE')
 
 		print("Converting armature {} to {}\n".format(source, target))
@@ -53,7 +58,6 @@ class Armature_converter:
 		else:
 			basebone = [b for b in self.target.pose.bones if b.parent is None]
 
-
 		if len(basebone) != 1:
 			raise Exception("The base armature has to have exactly one base bone")
 		else:
@@ -66,6 +70,14 @@ class Armature_converter:
 		a.walk_bones(a.get_basebone("target"), lambda b: b.rotation_quaternion.identity())
 
 	def get_pose_diff(self):
+		if not self.inherit_rotations:
+			for b in self.target.data.bones:
+				b.use_inherit_rotation = False
+			return
+		
+		for b in self.target.data.bones:
+			b.use_inherit_rotation = True 
+
 		self.reset_pose()
 		self.walk_bones(self.get_basebone(), self.get_bone_diff)
 
@@ -78,11 +90,13 @@ class Armature_converter:
 		bone.diff_quat = rot_bone.rotation_difference( rot_other )
 
 	def set_bone_from_diff(self, bone):
+		t_bone = self.target.pose \
+					.bones[bone.name]
 
-		self.target.pose \
-				.bones[bone.name] \
-				.rotation_quaternion *= bone.diff_quat.conjugated() \
-										* self.source.pose.bones[bone.name].rotation_quaternion
+		C.scene.objects.active = self.target
+		bpy.ops.object.mode_set(mode = 'POSE')
+
+		###
 		if self.root_translation:
 			v = self.source.pose.bones[bone.name].location
 		else:
@@ -90,7 +104,29 @@ class Armature_converter:
 
 		self.target.pose \
 				.bones[bone.name] \
-				.location = v 
+				.location = v
+
+		###
+		if not self.inherit_rotations:
+			self.set_poseposition()
+			# bpy.ops.object.mode_set(mode = 'OBJECT')		
+			# e = bpy.ops.object.empty_add(type='ARROWS', radius=0.3, view_align=False, 
+			# 			location=  self.source.pose.bones[bone.name].tail, rotation= self.source.pose.bones[bone.name].matrix.to_euler(),
+			# 			layers=(True,) + (False,) * 19)
+
+			m = self.source.pose.bones[bone.name].matrix.copy()
+			m.resize_4x4()
+			t_bone.matrix = m
+
+			# bpy.ops.object.select_all(action = 'DESELECT')
+			# self.target.select = True
+			
+								
+			return
+
+		###
+		t_bone.rotation_quaternion *= bone.diff_quat.conjugated() \
+										* self.source.pose.bones[bone.name].rotation_quaternion
 
 		# print("{:16} | {} | {}".format(bone.name, bone.diff_quat, bone.diff_quat))
 	
@@ -110,6 +146,9 @@ class Armature_converter:
 		
 		keyframes = self.source.animation_data.action.fcurves[0].keyframe_points
 		for i,keypoint in enumerate(keyframes):
+			if i < self.range["min"]: continue
+			if i > self.range["max"]: break
+
 			C.scene.frame_set(keypoint.co[0])
 			a.set_pose_from_diff()
 			
@@ -131,12 +170,22 @@ class Armature_converter:
 		print("Done")
 
 
-a = Armature_converter('SOURCE','BASE')
+# Don't ee all operators in info window
+bpy.app.debug_wm = False
+clean_empties()
+
+a = Armature_converter('SOURCE','TARGET')
+# a.range["max"] = 20
 a.root_translation = True
+a.inherit_rotations = True
 a.get_pose_diff()
+
 a.convert_animation()
+# a.set_pose_from_diff()
 a.set_poseposition()
 
+# See all operators in info window
+bpy.app.debug_wm = True
 
 # e = bpy.ops.object.empty_add(type='ARROWS', radius=0.3, view_align=False, 
 		# 	location=  self.source.pose.bones[bone.name].tail, rotation= (diff.conjugated()).to_euler(),
