@@ -2,11 +2,6 @@ import bpy
 from math import degrees
 from mathutils import Quaternion
 
-# TODO
-# -parse the animation
-
-
-
 
 C= bpy.context
 D= bpy.data
@@ -19,7 +14,7 @@ def clean_empties():
 
 
 class Armature_converter:
-	"""Translates the animation of one armature to another with different base pose"""
+	"""Translates the animation of one armature to another with different zero pose"""
 	bpy.types.Bone.diff_quat = bpy.props.FloatVectorProperty(
 			"Difference rotation", 
 			subtype= "QUATERNION", 
@@ -66,8 +61,8 @@ class Armature_converter:
 		return basebone
 
 	def reset_pose(self):
-		a.get_basebone("target").rotation_quaternion.identity()
-		a.walk_bones(a.get_basebone("target"), lambda b: b.rotation_quaternion.identity())
+		self.get_basebone("target").rotation_quaternion.identity()
+		self.walk_bones(self.get_basebone("target"), lambda b: b.rotation_quaternion.identity())
 
 	def get_pose_diff(self):
 		if not self.inherit_rotations:
@@ -142,7 +137,7 @@ class Armature_converter:
 			Armature_converter.walk_bones(ch, handler)
 
 	def convert_animation(self):
-		name = a.get_basebone("target").name
+		name = self.get_basebone("target").name
 		
 		keyframes = self.source.animation_data.action.fcurves[0].keyframe_points
 		for i,keypoint in enumerate(keyframes):
@@ -150,7 +145,7 @@ class Armature_converter:
 			if i > self.range["max"]: break
 
 			C.scene.frame_set(keypoint.co[0])
-			a.set_pose_from_diff()
+			self.set_pose_from_diff()
 			
 			if self.root_translation:
 				self.target.keyframe_insert(\
@@ -170,24 +165,27 @@ class Armature_converter:
 		print("Done")
 
 
-# Don't ee all operators in info window
-bpy.app.debug_wm = False
-clean_empties()
+def main():
+	# Don't ee all operators in info window
+	bpy.app.debug_wm = False
+	clean_empties()
 
-a = Armature_converter('SOURCE','TARGET')
-# a.range["max"] = 20
-a.root_translation = True
-a.inherit_rotations = True
-a.get_pose_diff()
+	a = Armature_converter('SOURCE','TARGET')
+	a.range["max"] = 20
+	a.root_translation = True
+	a.inherit_rotations = True
+	a.get_pose_diff()
 
-a.convert_animation()
-# a.set_pose_from_diff()
-a.set_poseposition()
+	a.convert_animation()
+	# a.set_pose_from_diff()
+	a.set_poseposition()
 
-# See all operators in info window
-bpy.app.debug_wm = True
+	# See all operators in info window
+	bpy.app.debug_wm = True
 
-# e = bpy.ops.object.empty_add(type='ARROWS', radius=0.3, view_align=False, 
-		# 	location=  self.source.pose.bones[bone.name].tail, rotation= (diff.conjugated()).to_euler(),
-		# 	layers=(True,) + (False,) * 19)
-
+	# e = bpy.ops.object.empty_add(type='ARROWS', radius=0.3, view_align=False, 
+			# 	location=  self.source.pose.bones[bone.name].tail, rotation= (diff.conjugated()).to_euler(),
+			# 	layers=(True,) + (False,) * 19)
+	
+if __name__ == '__main__':
+	main()

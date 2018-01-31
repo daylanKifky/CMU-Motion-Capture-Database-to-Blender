@@ -1,2 +1,5 @@
 raw_data/*
 *.blend1
+__pycache__
+*.pyc
+*.sublime*
