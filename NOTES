@@ -1,0 +1,18 @@
+
+TRANSFORM head/tail to world
+[These vectors are on POSE space, and the Pose_Bone.matrix are on POSE space]
+
+>>> head = C.object.convert_space(C.object.pose.bones['foreArm.R'], bpy.object.pose.bones['foreArm.R'].matrix, "POSE", "WORLD")
+>>> bpy.ops.object.empty_add(rotation = head.to_euler(), location = head.to_translation())
+
+
+
+TRANSFORM PoseBone.rotation_quaternion
+[This rotation is in BONE, ("LOCAL") space]
+
+>>> q = bone.rotation_quaternion
+>>> m = q.to_matrix()
+>>> qc = C.object.convert_space(bone, m.to_4x4()  , "LOCAL",  "WORLD")
+>>> bpy.ops.object.empty_add(rotation = qc.to_euler(), location = bone.matrix.to_translation())
+
+
