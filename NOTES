@@ -10,9 +10,24 @@ TRANSFORM head/tail to world
 TRANSFORM PoseBone.rotation_quaternion
 [This rotation is in BONE, ("LOCAL") space]
 
+>>> bone = C.object.pose.bones['foreArm.R']
 >>> q = bone.rotation_quaternion
 >>> m = q.to_matrix()
 >>> qc = C.object.convert_space(bone, m.to_4x4()  , "LOCAL",  "WORLD")
 >>> bpy.ops.object.empty_add(rotation = qc.to_euler(), location = bone.matrix.to_translation())
 
+OR
 
+>>> mh  = Matrix()
+>>> h = bone.head
+>>> mh.Translation(h)
+>>> hw =C.object.convert_space(bone, mh , "LOCAL",  "WORLD")
+
+def bone_vec_to_world(vec):
+	try:
+		if vec.owner.id_data.type != "ARMATURE"
+			raise Exception("The vector owner must be an Armature")
+		
+	except Exception as e:
+		print("Can't convert bone vector to World space, probably the vector didn't belong to a bone, see error below")
+		raise e
