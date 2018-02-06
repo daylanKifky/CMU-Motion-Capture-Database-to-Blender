@@ -84,6 +84,8 @@ relations = {\
 magnitudes = {}
 
 # clean_empties()
+# 
+iQuad = Quaternion((1,0,0,0))
 
 
 for rel in sorted(relations.items()):
@@ -136,8 +138,17 @@ for rel in sorted(relations.items()):
 	twist = Quaternion( (quat.w, ap.x, ap.y, ap.z)  )
 	twist.normalize()
 
-	the_bone.roll = - twist.angle
-	print(twist.angle, " ", twist.axis)
+	swing = quat * twist.conjugated()
+
+	if twist.axis.dot(Vector((0,0,1))) >= 0:
+		the_bone.roll = -twist.angle
+	else:
+		the_bone.roll = twist.angle
+
+	# print(twist.angle, " ", twist.axis, " ", twist.magnitude)
+	print(twist.dot(iQuad), "<< DOT | ANGLE >> ", twist.axis.dot(Vector((0,0,1))))
+	print("\n")
+	# print(quat.dot(twist))
 
 
 # names = [source.data.bones[k].name for k in the_bone.others.keys()]

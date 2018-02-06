@@ -47,3 +47,11 @@ def unregister():
 
 if __name__ == "__main__":
 	register()
+
+
+
+ # bl_space_type = "PROPERTIES"
+ #    bl_region_type = "WINDOW"
+ #    bl_context = "object"
+ #    
+ 

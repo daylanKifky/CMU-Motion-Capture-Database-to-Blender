@@ -1,27 +1,29 @@
 
-TRANSFORM head/tail to world
-[These vectors are on POSE space, and the Pose_Bone.matrix are on POSE space]
+# TRANSFORM head/tail to world
+# [These vectors are on POSE space, and the Pose_Bone.matrix are on POSE space]
 
->>> head = C.object.convert_space(C.object.pose.bones['foreArm.R'], bpy.object.pose.bones['foreArm.R'].matrix, "POSE", "WORLD")
->>> bpy.ops.object.empty_add(rotation = head.to_euler(), location = head.to_translation())
+# >>> head = C.object.convert_space(C.object.pose.bones['foreArm.R'], bpy.object.pose.bones['foreArm.R'].matrix, "POSE", "WORLD")
+# >>> bpy.ops.object.empty_add(rotation = head.to_euler(), location = head.to_translation())
 
 
 
-TRANSFORM PoseBone.rotation_quaternion
-[This rotation is in BONE, ("LOCAL") space]
+# TRANSFORM PoseBone.rotation_quaternion
+# [This rotation is in BONE, ("LOCAL") space]
 
->>> bone = C.object.pose.bones['foreArm.R']
->>> q = bone.rotation_quaternion
->>> m = q.to_matrix()
->>> qc = C.object.convert_space(bone, m.to_4x4()  , "LOCAL",  "WORLD")
->>> bpy.ops.object.empty_add(rotation = qc.to_euler(), location = bone.matrix.to_translation())
+# >>> bone = C.object.pose.bones['foreArm.R']
+# >>> q = bone.rotation_quaternion
+# >>> m = q.to_matrix()
+# >>> qc = C.object.convert_space(bone, m.to_4x4()  , "LOCAL",  "WORLD")
+# >>> bpy.ops.object.empty_add(rotation = qc.to_euler(), location = bone.matrix.to_translation())
 
-OR
+# OR
 
->>> mh  = Matrix()
->>> h = bone.head
->>> mh.Translation(h)
->>> hw =C.object.convert_space(bone, mh , "LOCAL",  "WORLD")
+# >>> mh  = Matrix()
+# >>> h = bone.head
+# >>> mh.Translation(h)
+# >>> hw =C.object.convert_space(bone, mh , "LOCAL",  "WORLD")
+
+
 
 def bone_vec_to_world(vec):
 	try:
@@ -31,3 +33,12 @@ def bone_vec_to_world(vec):
 	except Exception as e:
 		print("Can't convert bone vector to World space, probably the vector didn't belong to a bone, see error below")
 		raise e
+
+	ob = vec.owner.id_data
+	bone = vec.owner.data
+
+	m_vec  = Matrix()
+	m_vec.Translation(vec)
+	m_vec = ob.convert_space(bone, m_vec, "LOCAL",  "WORLD")
+
+	return m_vec.to_translation()
