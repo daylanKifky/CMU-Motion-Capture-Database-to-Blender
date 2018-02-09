@@ -1,4 +1,16 @@
 import bpy
+from os import path
+from sys import path as syspath
+syspath.append(path.dirname(bpy.data.filepath))
+import create_mesh
+import imp
+imp.reload(create_mesh)
+#TODEBUG:
+# __import__('code').interact(local={k: v for ns in (globals(), locals()) for k, v in ns.items()})
+
+##########################
+# CREATE RNA PROPS
+##########################
 
 def on_zp_bone_update(self, context):
     bpy.ops.armature.zpose_verify()
@@ -12,6 +24,8 @@ bpy.utils.register_class(Bone_Collection)
 def on_zp_source_update(self, context):
     if context.object.data.zp_source is None:
         return
+
+    bpy.ops.object.mode_set(mode = 'EDIT')
 
     context.object.data.zp_source.data.show_names = True
     
@@ -27,8 +41,6 @@ def on_zp_source_update(self, context):
 
 # def on_zp_bone_update(self, context):
 
-
-
 bpy.types.Armature.zp_source = bpy.props.PointerProperty(name = "Source armature object",
                                 description="The Armature from where to get the animations",
                                 type=bpy.types.Object, update=on_zp_source_update)
@@ -43,9 +55,10 @@ bpy.types.Armature.zp_clearprev = bpy.props.BoolProperty(name = "Clear previous 
 
 bpy.types.EditBone.zp_bone = bpy.props.CollectionProperty(type=Bone_Collection )
 bpy.types.Armature.zp_msg = bpy.props.StringProperty() 
-# bpy.types.Bone.zp_bone.add()
 
-
+##########################
+# PANELS
+##########################
 class ZP_ArmatureSelectPanel(bpy.types.Panel):
     bl_label = "Convert zero pose"
     bl_space_type = "PROPERTIES"
@@ -78,8 +91,6 @@ class ZP_ArmatureSelectPanel(bpy.types.Panel):
             box.operator("wm.properties_context_change", icon='BONE_DATA',
                          text="Go to Bone tab...").context = 'BONE'
 
-
-
 class ZP_BoneSelectPanel(bpy.types.Panel):
     bl_label = "Link ZeroPose Bones"
     bl_space_type = "PROPERTIES"
@@ -88,9 +99,17 @@ class ZP_BoneSelectPanel(bpy.types.Panel):
     
     @classmethod
     def poll(cls, context):
-        return context.object.type == "ARMATURE" and context.mode == 'EDIT_ARMATURE'
+        return context.object.type == "ARMATURE" 
 
     def draw(self, context):
+        if context.mode == 'EDIT_ARMATURE':
+            self.draw_menu(context)
+        else:
+            self.layout.label(icon='EDITMODE_HLT', text="Enter edit mode to link bones")
+
+
+
+    def draw_menu(self, context):
         ob = context.object
         if ob.data.zp_source is None:
             box = self.layout.box()
@@ -118,8 +137,9 @@ class ZP_BoneSelectPanel(bpy.types.Panel):
 
             self.layout.operator("armature.zpose_addbone", icon="PLUS", text="Add linked bone..")
 
-
-            # self.layout.prop(ob.data, "zp_source", text="")
+##########################
+# OPERATORS
+##########################
 
 class ZposeSameNameLinking(bpy.types.Operator):
     bl_idname = "armature.zpose_samename"
@@ -140,11 +160,15 @@ class ZposeVerifyRelations(bpy.types.Operator):
     bl_idname = "armature.zpose_verify"
     bl_label = "Verify armature ZeroPose relations"
 
-    custom_bone = bpy.data.objects["Custom_Bone"] 
 
     def execute(self, context):
         ob = context.object
         source = ob.data.zp_source
+        
+        if "fake_bone" in bpy.data.objects.keys():
+            custom_bone = bpy.data.objects["fake_bone"] 
+        else:
+            custom_bone = create_mesh.add_fake_bone(context)
 
         for pb in source.pose.bones:
             pb.custom_shape = None
@@ -153,8 +177,8 @@ class ZposeVerifyRelations(bpy.types.Operator):
             for i in range(len(b.zp_bone)):
                 name = b.zp_bone[i].name
                 if name in source.data.bones.keys():
-                    print("set bone ", name)
-                    source.pose.bones[name].custom_shape = self.custom_bone
+                    # print("set bone ", name)
+                    source.pose.bones[name].custom_shape = custom_bone
 
         return {"FINISHED"}    
 
