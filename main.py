@@ -2,218 +2,122 @@ import bpy
 from os import path
 from sys import path as syspath
 syspath.append(path.dirname(bpy.data.filepath))
-import create_mesh
+import zpose_ui
+import convert_armature
+from convert_armature import *
+
+import simplify_armature as S
+
+
 import imp
-imp.reload(create_mesh)
-#TODEBUG:
+imp.reload(zpose_ui)
+imp.reload(convert_armature)
+imp.reload(S)
+
+def debug(*args):
+     print(" ".join(map(str,args)))
+
 # __import__('code').interact(local={k: v for ns in (globals(), locals()) for k, v in ns.items()})
+# 
 
-##########################
-# CREATE RNA PROPS
-##########################
+class ZP_SimplifyArmature(bpy.types.Operator):
+    bl_idname = "armature.zpose_simplify"
+    bl_label = "Map the pose in a more complex armature to the currently selected"
 
-def on_zp_bone_update(self, context):
-    bpy.ops.armature.zpose_verify()
-
-# Assign a collection
-class Bone_Collection(bpy.types.PropertyGroup):
-    name = bpy.props.StringProperty(name="Source Bone", default="", update=on_zp_bone_update)
-    # value = bpy.props.IntProperty(name="Test Prop", default=22)
-bpy.utils.register_class(Bone_Collection)
-
-def on_zp_source_update(self, context):
-    if context.object.data.zp_source is None:
-        return
-
-    bpy.ops.object.mode_set(mode = 'EDIT')
-
-    context.object.data.zp_source.data.show_names = True
-    
-    if context.object.data.zp_clearprev:
-        for b in context.object.data.edit_bones:
-                b.zp_bone.clear()
-                b.zp_bone.add()
-
-    if context.object.data.zp_samename:
-        bpy.ops.armature.zpose_samename()
-    
-    bpy.ops.armature.zpose_verify()
-
-# def on_zp_bone_update(self, context):
-
-bpy.types.Armature.zp_source = bpy.props.PointerProperty(name = "Source armature object",
-                                description="The Armature from where to get the animations",
-                                type=bpy.types.Object, update=on_zp_source_update)
-
-bpy.types.Armature.zp_samename = bpy.props.BoolProperty(name = "Link same-named bones",
-                                description = "Create a link to source's bones with the same name",
-                                default=True)
-
-bpy.types.Armature.zp_clearprev = bpy.props.BoolProperty(name = "Clear previous linking",
-                                description= "When selected any previous linking will be cleared",
-                                default=False)
-
-bpy.types.EditBone.zp_bone = bpy.props.CollectionProperty(type=Bone_Collection )
-bpy.types.Armature.zp_msg = bpy.props.StringProperty() 
-
-##########################
-# PANELS
-##########################
-class ZP_ArmatureSelectPanel(bpy.types.Panel):
-    bl_label = "Convert zero pose"
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "data"
-    
     @classmethod
     def poll(cls, context):
-        return context.object.type == "ARMATURE"
+        return context.object.type == "ARMATURE" and context.object.data.zp_source
 
-    def draw(self, context):
-        ob = context.object
-        self.layout.prop(ob.data, "zp_clearprev" )
-        self.layout.prop(ob.data, "zp_samename", text="Link same-named bones")
-
-        col = self.layout.column()
-
-        if ob.data.zp_source is None:
-            col.alert = True
-            col.label(text="Select the source armature to convert from")
-            col.prop(ob.data, "zp_source", text="")
-
-        elif ob.data.zp_source.type == "ARMATURE":
-            col.alert = False
-            col.prop(ob.data, "zp_source", text="")
-
-            box = col.box()
-            box.label("Target armature selected,")
-            box.label("go to the bone tab to complete the setup:")
-            box.operator("wm.properties_context_change", icon='BONE_DATA',
-                         text="Go to Bone tab...").context = 'BONE'
-
-class ZP_BoneSelectPanel(bpy.types.Panel):
-    bl_label = "Link ZeroPose Bones"
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "bone"
-    
-    @classmethod
-    def poll(cls, context):
-        return context.object.type == "ARMATURE" 
-
-    def draw(self, context):
-        if context.mode == 'EDIT_ARMATURE':
-            self.draw_menu(context)
-        else:
-            self.layout.label(icon='EDITMODE_HLT', text="Enter edit mode to link bones")
-
-
-
-    def draw_menu(self, context):
-        ob = context.object
-        if ob.data.zp_source is None:
-            box = self.layout.box()
-            box.alert = True  # XXX: this should apply to the box background
-            box.label(icon='INFO', text="Select the target Armature in the data tab")
-            box.operator("wm.properties_context_change", icon='ARMATURE_DATA',
-                         text="Go to Data tab...").context = 'DATA'
-
-            # self.layout.label(text="Select the target Armature in the data context")
-        elif ob.data.edit_bones.active:
-            self.layout.operator("armature.zpose_verify", icon="FILE_TICK", text="Verify all relations")
-
-            
-            self.layout.label(text="Select the source bone(s) for [%s]" % ob.data.edit_bones.active.name)
-            row = self.layout.row()
-            split = row.split(percentage=0.95)
-            col1 = split.column()
-            col2 = split.column()
-
-            for i in range(len(ob.data.edit_bones.active.zp_bone)):
-                col1.prop_search(ob.data.edit_bones.active.zp_bone[i], "name", 
-                                    ob.data.zp_source.data, "bones", text="")
-
-                col2.operator("armature.zpose_removebone", icon="CANCEL", emboss=False, text="").index=i
-
-            self.layout.operator("armature.zpose_addbone", icon="PLUS", text="Add linked bone..")
-
-##########################
-# OPERATORS
-##########################
-
-class ZposeSameNameLinking(bpy.types.Operator):
-    bl_idname = "armature.zpose_samename"
-    bl_label = "Create zpose linking by name"
-
-    def execute(self, context):
-        ob = context.object
-        source = ob.data.zp_source
-
-        if source:
-            for b in ob.data.edit_bones:
-                if b.name in source.data.bones.keys():
-                    b.zp_bone[""].name = b.name
-
+    def invoke(self, context, event):
+        self.execute(context)
         return {"FINISHED"}
 
-class ZposeVerifyRelations(bpy.types.Operator):
-    bl_idname = "armature.zpose_verify"
-    bl_label = "Verify armature ZeroPose relations"
+    def mode_set(self, context, who, mode="EDIT"):
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        if mode == "OBJECT": return
 
+        if who == self.target or who in ("TARGET", "target", "Target"):
+            who = self.target
+            exiting = self.source
+        elif who == self.source or who in ("SOURCE", "source", "Source"):
+            who = self.source
+            exiting =self.target
 
-    def execute(self, context):
-        ob = context.object
-        source = ob.data.zp_source
+        exiting.select = False
+        who.select = True
+        context.scene.objects.active=who
+        print("****************")
+        who.data.update_tag()
+        context.scene.update()
+        bpy.ops.object.mode_set(mode = 'EDIT')
         
-        if "fake_bone" in bpy.data.objects.keys():
-            custom_bone = bpy.data.objects["fake_bone"] 
-        else:
-            custom_bone = create_mesh.add_fake_bone(context)
-
-        for pb in source.pose.bones:
-            pb.custom_shape = None
-
-        for b in ob.data.edit_bones:
-            for i in range(len(b.zp_bone)):
-                name = b.zp_bone[i].name
-                if name in source.data.bones.keys():
-                    # print("set bone ", name)
-                    source.pose.bones[name].custom_shape = custom_bone
-
-        return {"FINISHED"}    
-
-class ZposeAddBone(bpy.types.Operator):
-    bl_idname = "armature.zpose_addbone"
-    bl_label = "Add a linked bone to the Bone_Collection"
 
     def execute(self, context):
-        bone = context.object.data.edit_bones.active
-        bone.zp_bone.add()
-        return {"FINISHED"}    
+        source = self.source = context.object.data.zp_source
+        target = self.target = context.object
 
-class ZposeRemoveBone(bpy.types.Operator):
-    bl_idname = "armature.zpose_removebone"
-    bl_label = "Remove a linked bone from the Bone_Collection"
-    index = bpy.props.IntProperty()
+        # __import__('code').interact(local={k: v for ns in (globals(), locals()) for k, v in ns.items()})
 
-    def execute(self, context):
-        bone = context.object.data.edit_bones.active
-        bone.zp_bone.remove(self.index)
+        #keep a copy of source's edit_bones collection
+        self.mode_set(context, "SOURCE")
+        # print(source.data.edit_bones[0])
+        
+        self.source_edit_bones = {}
+        for k in source.data.bones.keys():
+            editbone = source.data.edit_bones[k]
+            self.source_edit_bones[k] = (editbone.name, editbone.roll)
+            # print(k, self.source_edit_bones[k].)
+
+
+        self.mode_set(context, "Target")
+        #TODO: get_basebone interface sucks!
+        basebone = Armature_converter.get_basebone(self, "target")
+        basebone = target.data.edit_bones[basebone.name]
+        print(basebone)
+
+        Armature_converter.walk_bones(basebone, self.simplify)
+   
+
         return {"FINISHED"} 
 
+    def simplify(self, bone):
+        magnitudes = {}
+        if len(bone.zp_bone) > 1:
+            self.do_multi_bone(bone)
+        else:
+            self.do_single_bone(bone)
+
+    def do_single_bone(self, bone):
+        zp_bname = bone.zp_bone[0].name
+        magnitude = bone.vector.magnitude
+        
+        if len(bone.zp_bone) == 0 or zp_bname == "":
+            debug(bone.name, "No linked bone")
+            return
+
+        other = self.source.pose.bones[zp_bname]
+
+        #Get the direction in WORLD Space
+        a = S.bone_vec_to_world(other.head)
+        b = S.bone_vec_to_world(other.tail)
+        direction = b - a
+        
+
+        roll = self.source_edit_bones[zp_bname][1]
+        ename = self.source_edit_bones[zp_bname][0]
+
+        bone.tail = bone.head + direction.normalized() * magnitude
+        bone.roll = roll
+
+        # print("< {:<12} {:<15}[SINGLE] ->{} | {} | {}".format( ename + " >", bone.name, bone.zp_bone.keys(), direction, roll) )
 
 
-def register():
+    def do_multi_bone(bone):
+        print("{:<15}[MULTI] ->{}".format( bone.name, bone.zp_bone.keys()) )
+
+
+if __name__ == "__main__":
+    zpose_ui.register()
     bpy.utils.register_module(__name__)
-    for ob in bpy.data.objects:
-        if ob.type == "ARMATURE":
-            for b in ob.data.edit_bones:
-                b.zp_bone.clear()
-                b.zp_bone.add()
-
-def unregister():
-    bpy.utils.unregister_module(__name__)
-
-
-# if __name__ == "__main__":
-register()
+    #test call
+    # bpy.ops.armature.zpose_simplify()
