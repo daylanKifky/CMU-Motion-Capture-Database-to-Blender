@@ -10,7 +10,6 @@ imp.reload(create_mesh)
 
 ##########################
 # CREATE RNA PROPS
-##########################
 
 def on_zp_bone_update(self, context):
     bpy.ops.armature.zpose_verify()

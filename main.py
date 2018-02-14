@@ -1,4 +1,5 @@
 import bpy
+from mathutils import *
 from os import path
 from sys import path as syspath
 syspath.append(path.dirname(bpy.data.filepath))
@@ -33,6 +34,7 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         return {"FINISHED"}
 
     def mode_set(self, context, who, mode="EDIT"):
+        debug("Mode set {} of {}".format(mode, who))
         bpy.ops.object.mode_set(mode = 'OBJECT')
         if mode == "OBJECT": return
 
@@ -46,7 +48,6 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         exiting.select = False
         who.select = True
         context.scene.objects.active=who
-        print("****************")
         who.data.update_tag()
         context.scene.update()
         bpy.ops.object.mode_set(mode = 'EDIT')
@@ -55,7 +56,12 @@ class ZP_SimplifyArmature(bpy.types.Operator):
     def execute(self, context):
         source = self.source = context.object.data.zp_source
         target = self.target = context.object
+        
+        debug(" ",  "*"*20, "\n", 
+            "Start conversion from {} to {}\n".format(source.name, target.name),
+            "*"*20)
 
+        self.context = context
         # __import__('code').interact(local={k: v for ns in (globals(), locals()) for k, v in ns.items()})
 
         #keep a copy of source's edit_bones collection
@@ -70,15 +76,25 @@ class ZP_SimplifyArmature(bpy.types.Operator):
 
 
         self.mode_set(context, "Target")
+        self.collect_information()
         #TODO: get_basebone interface sucks!
         basebone = Armature_converter.get_basebone(self, "target")
         basebone = target.data.edit_bones[basebone.name]
-        print(basebone)
+        debug("Basebone: ",basebone.name)
 
         Armature_converter.walk_bones(basebone, self.simplify)
    
 
-        return {"FINISHED"} 
+        return {"FINISHED"}
+
+    def collect_information(self):
+        self.prev_state = {}
+        for b in self.target.data.bones:
+             self.prev_state[b.name] = {
+             "head": b.head.copy(), 
+             "tail": b.tail.copy(), 
+             "magnitude": b.vector.magnitude
+             }
 
     def simplify(self, bone):
         magnitudes = {}
@@ -88,14 +104,18 @@ class ZP_SimplifyArmature(bpy.types.Operator):
             self.do_single_bone(bone)
 
     def do_single_bone(self, bone):
+        if bone.parent.name == "lumbar1":
+            return #TODO: [first child case] and [parent case]
+        #TODO: Why the legs are not working??
+
         zp_bname = bone.zp_bone[0].name
-        magnitude = bone.vector.magnitude
+        magnitude = self.prev_state[bone.name]["magnitude"]
         
         if len(bone.zp_bone) == 0 or zp_bname == "":
             debug(bone.name, "No linked bone")
             return
 
-        other = self.source.pose.bones[zp_bname]
+        other = self.source.pose.bones[zp_bname]    
 
         #Get the direction in WORLD Space
         a = S.bone_vec_to_world(other.head)
@@ -106,10 +126,66 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         roll = self.source_edit_bones[zp_bname][1]
         ename = self.source_edit_bones[zp_bname][0]
 
+        other = self.source.data.bones[zp_bname]
+
+        # if bone.name in ["clavicle.R", "clavicle.L"] :
+        Mp = self.get_bone_co_pose_space(bone.parent.name, "tip" )
+        Mhead = Matrix.Translation(self.prev_state[bone.name]["head"])
+        D.objects["X"].matrix_world = self.target.matrix_world * Mp #* Mhead 
+        bone.head = Mp * self.prev_state[bone.name]["head"]
+    
+
+        # print("#"*20, "BEFORE:", bone.name,  bone.tail, bone.vector.magnitude )
         bone.tail = bone.head + direction.normalized() * magnitude
         bone.roll = roll
 
+        # print("#"*20, "AFTER:", bone.name, bone.tail, bone.vector.magnitude )
+
+
+        # if bone.name == "clavicle.R":
+        #     print("#"*20, "AFTER:", bone.name, bone.tail )
+
+        #     print("#"*20, "AFTER:", bone.name, bone.matrix )
+
+        # self.target.data.update_tag()
+        # self.context.scene.update()
+        self.target.update_from_editmode()
+
+
         # print("< {:<12} {:<15}[SINGLE] ->{} | {} | {}".format( ename + " >", bone.name, bone.zp_bone.keys(), direction, roll) )
+
+    def get_bone_co_pose_space(self, name, tip_or_head):
+        bone = self.target.data.bones[name]
+        
+        Mtip = Matrix.Translation(bone.tail)
+        Mhead = Matrix.Translation(bone.head)
+        
+        if tip_or_head.lower() == "tip":
+            dest = Mtip
+        elif tip_or_head.lower() == "head":
+            dest = Mhead
+            
+        if bone.parent:    
+            Mptip = Matrix.Translation(bone.parent.tail - bone.parent.head)
+            #head and orientation of parent bone
+            Mw  = bone.parent.matrix_local
+            #grandfather orientation
+            Mw *= bone.parent.matrix.to_4x4().inverted()
+            #tip of parent bone
+            Mw *= Mptip
+            #back to orientation of parent bone
+            Mw *= bone.parent.matrix.to_4x4()
+            #tip of bone
+            Mw *= dest
+            #orientation of bone
+            Mw *= bone.matrix.to_4x4()    
+        else:
+            Mw = bone.matrix_local
+            Mw *= bone.matrix.to_4x4().inverted()
+            Mw *= dest
+            Mw *= bone.matrix.to_4x4()
+            
+        return Mw
 
 
     def do_multi_bone(bone):
