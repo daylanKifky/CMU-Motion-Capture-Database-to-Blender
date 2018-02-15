@@ -1,8 +1,71 @@
 import bpy, bmesh
 from mathutils import *
+from functools import cmp_to_key
 
 D = bpy.data
 C = bpy.context
+
+verbosity = 0
+
+def debug(*args):
+	global verbosity
+	if verbosity > 0:
+		print(" ".join(map(str,args)))
+
+def cmp_genealogy(this, other):
+    if this.parent == other:
+        debug(this.name, "is child of", other.name)
+        return 1
+    elif other in this.children_recursive :
+        debug(this.name, "is parent of", other.name)
+        return -1
+    
+    debug(this.name, "no relation", other.name)
+    return 0
+
+genealogy = cmp_to_key(cmp_genealogy)
+
+def verify_chain(bones):
+    for i,b in enumerate(bones):
+        if i == 0: continue
+        if b.parent != bones[i-1]:
+            debug("Broken bone chain",i, b.parent.name, bones[i-1].name)
+            return False
+    return True
+
+
+# _zvec = Vector((1,0,0))
+def get_average_twist(bones, direction):
+	# global _zvec
+	
+	quat = bone_rot_to_world(bones[0].rotation_quaternion)
+	for b in bones[1:]:
+		quat = bone_rot_to_world(b.rotation_quaternion).slerp(quat, 0.5)
+
+	#Extract twist
+	axis = Vector(quat[1:])
+	axis.normalize()
+
+	ap = axis.project(direction)
+	twist = Quaternion( (quat.w, ap.x, ap.y, ap.z)  )
+	twist.normalize()
+
+	print([b.name for b in bones], twist.axis.dot(direction))
+	#__import__('code').interact(local={k: v for ns in (globals(), locals()) for k, v in ns.items()})
+
+	# if twist.axis.dot(_zvec) >= 0:
+	# 	return -twist.angle
+	# else:
+	return twist.angle
+
+def get_average_roll(bones, direction):
+	total_roll = 0
+	for b in bones:
+		total_roll += b.roll * direction.dot(b.vector) / len(bones)
+
+	return total_roll
+
+
 
 def clean_empties():
 	for ob in D.scenes['Scene'].objects:

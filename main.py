@@ -16,7 +16,8 @@ imp.reload(convert_armature)
 imp.reload(S)
 
 def debug(*args):
-     print(" ".join(map(str,args)))
+    return
+    print(" ".join(map(str,args)))
 
 # __import__('code').interact(local={k: v for ns in (globals(), locals()) for k, v in ns.items()})
 # 
@@ -104,10 +105,6 @@ class ZP_SimplifyArmature(bpy.types.Operator):
             self.do_single_bone(bone)
 
     def do_single_bone(self, bone):
-        if bone.parent.name == "lumbar1":
-            return #TODO: [first child case] and [parent case]
-        #TODO: Why the legs are not working??
-
         zp_bname = bone.zp_bone[0].name
         magnitude = self.prev_state[bone.name]["magnitude"]
         
@@ -122,37 +119,46 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         b = S.bone_vec_to_world(other.tail)
         direction = b - a
         
-
         roll = self.source_edit_bones[zp_bname][1]
         ename = self.source_edit_bones[zp_bname][0]
 
-        other = self.source.data.bones[zp_bname]
-
-        # if bone.name in ["clavicle.R", "clavicle.L"] :
         Mp = self.get_bone_co_pose_space(bone.parent.name, "tip" )
         Mhead = Matrix.Translation(self.prev_state[bone.name]["head"])
-        D.objects["X"].matrix_world = self.target.matrix_world * Mp #* Mhead 
+        #D.objects["X"].matrix_world = self.target.matrix_world * Mp #* Mhead 
         bone.head = Mp * self.prev_state[bone.name]["head"]
     
-
-        # print("#"*20, "BEFORE:", bone.name,  bone.tail, bone.vector.magnitude )
         bone.tail = bone.head + direction.normalized() * magnitude
         bone.roll = roll
 
-        # print("#"*20, "AFTER:", bone.name, bone.tail, bone.vector.magnitude )
-
-
-        # if bone.name == "clavicle.R":
-        #     print("#"*20, "AFTER:", bone.name, bone.tail )
-
-        #     print("#"*20, "AFTER:", bone.name, bone.matrix )
-
-        # self.target.data.update_tag()
-        # self.context.scene.update()
         self.target.update_from_editmode()
 
+    def do_multi_bone(self, bone):
+        magnitude = self.prev_state[bone.name]["magnitude"]
+        others = []
+        for zp in bone.zp_bone:
+            others.append(self.source.pose.bones[zp.name])
+        others.sort(key=S.genealogy)
 
-        # print("< {:<12} {:<15}[SINGLE] ->{} | {} | {}".format( ename + " >", bone.name, bone.zp_bone.keys(), direction, roll) )
+        assert S.verify_chain(others)
+        debug("{:<15}[MULTI] ->{}".format( bone.name, [b.name for b in others]) )
+
+        #Get the direction in WORLD Space
+        a = S.bone_vec_to_world(others[0].head)
+        b = S.bone_vec_to_world(others[-1].tail)
+        direction = b - a
+
+        Mp = self.get_bone_co_pose_space(bone.parent.name, "tip" )
+        Mhead = Matrix.Translation(self.prev_state[bone.name]["head"])
+        #D.objects["X"].matrix_world = self.target.matrix_world * Mp #* Mhead 
+        bone.head = Mp * self.prev_state[bone.name]["head"]
+        bone.tail = bone.head + direction.normalized() * magnitude
+        bone.roll = S.get_average_twist(others, direction)
+
+        self.target.update_from_editmode()
+        # zp_bname = bone.zp_bone[0].name
+        # magnitude = self.prev_state[bone.name]["magnitude"]
+        # other = self.source.pose.bones[zp_bname]
+        
 
     def get_bone_co_pose_space(self, name, tip_or_head):
         bone = self.target.data.bones[name]
@@ -180,16 +186,12 @@ class ZP_SimplifyArmature(bpy.types.Operator):
             #orientation of bone
             Mw *= bone.matrix.to_4x4()    
         else:
-            Mw = bone.matrix_local
-            Mw *= bone.matrix.to_4x4().inverted()
-            Mw *= dest
+            Mw = dest
             Mw *= bone.matrix.to_4x4()
             
         return Mw
 
 
-    def do_multi_bone(bone):
-        print("{:<15}[MULTI] ->{}".format( bone.name, bone.zp_bone.keys()) )
 
 
 if __name__ == "__main__":
