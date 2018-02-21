@@ -10,7 +10,6 @@ from convert_armature import *
 
 import simplify_armature as S
 
-
 import imp
 imp.reload(zpose_ui)
 imp.reload(convert_armature)
@@ -20,12 +19,13 @@ def debug(*args):
     # return
     print(" ".join(map(str,args)))
 
-# __import__('code').interact(local={k: v for ns in (globals(), locals()) for k, v in ns.items()})
-# 
+
 
 class ZP_SimplifyArmature(bpy.types.Operator):
     bl_idname = "armature.zpose_simplify"
-    bl_label = "Map the pose in a more complex armature to the currently selected"
+    bl_label = "ZeroPose convert"
+    bl_description = """Create an estimation of the source's animations with other armature's Rest Pose.
+    A bone-mapping has to be done from the properties panel before running this operator."""
 
     twists = {}
 
@@ -93,6 +93,11 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         self.source.data.update_tag()
         context.scene.update()
 
+        self.simplify(basebone)
+        self.target.data.update_tag()
+        self.target.update_tag({'OBJECT', 'DATA', 'TIME'})
+        self.context.scene.update()
+
         Armature_converter.walk_bones(basebone, self.simplify)
 
         self.source.data.pose_position = "POSE"
@@ -102,23 +107,28 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         debug("***********COPY POSE********")
         basebone = Armature_converter.get_basebone(self, "target")
         self.slerps = {}
+        self.copy_pose(basebone)
+        self.target.data.update_tag()
+        self.target.update_tag({'OBJECT', 'DATA', 'TIME'})
+        self.context.scene.update()
+
         Armature_converter.walk_bones(basebone, self.copy_pose)
 
         ##########################
         # Create empties, axis and (no well orieted) rotation arcs
         ##########################
-        self.mode_set(context, "Target", "OBJECT")
+        # self.mode_set(context, "Target", "OBJECT")
         # for name, rot in self.slerps.items():
         #     bpy.ops.object.empty_add(
         #         location = self.target.matrix_world* self.target.pose.bones[name].matrix.to_translation(), 
         #         rotation=rot.to_euler(),
         #         type='ARROWS', radius=0.2)
 
-        for name, m in self.slerps.items():
-            bpy.ops.object.empty_add(
-                location = m.to_translation(), 
-                rotation=m.to_euler(),
-                type='ARROWS', radius=0.2)
+        # for name, m in self.slerps.items():
+        #     bpy.ops.object.empty_add(
+        #         location = m.to_translation(), 
+        #         rotation=m.to_euler(),
+        #         type='ARROWS', radius=0.2)
 
 
         # for name, empty in self.twists.items():
@@ -132,8 +142,8 @@ class ZP_SimplifyArmature(bpy.types.Operator):
 
         #     S.create_direction_obj(name, self.target.matrix_world* empty[0], empty[1].axis *0.2)
    
-
         return {"FINISHED"}
+
     ##########################
     # Second procedure, to be done on every pose in Pose mode
     ##########################
@@ -248,7 +258,11 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         roll = self.source_edit_bones[zp_bname][1]
         ename = self.source_edit_bones[zp_bname][0]
 
-        Mp = self.get_bone_co_pose_space(bone.parent.name, "tip" )
+        if bone.parent:
+            Mp = self.get_bone_co_pose_space(bone.parent.name, "tip" )
+        else:
+            Mp = Matrix()
+
         Mhead = Matrix.Translation(self.prev_state[bone.name]["head"])
         #D.objects["X"].matrix_world = self.target.matrix_world * Mp #* Mhead 
         bone.head = Mp * self.prev_state[bone.name]["head"]
@@ -276,7 +290,11 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         b = others[-1].tail
         direction = b - a
 
-        Mp = self.get_bone_co_pose_space(bone.parent.name, "tip" )
+        if bone.parent:
+            Mp = self.get_bone_co_pose_space(bone.parent.name, "tip" )
+        else:
+            Mp = Matrix()
+
         Mhead = Matrix.Translation(self.prev_state[bone.name]["head"])
         #D.objects["X"].matrix_world = self.target.matrix_world * Mp #* Mhead 
         bone.head = Mp * self.prev_state[bone.name]["head"]
