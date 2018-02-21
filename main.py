@@ -1,5 +1,6 @@
 import bpy
 from mathutils import *
+from math import pi
 from os import path
 from sys import path as syspath
 syspath.append(path.dirname(bpy.data.filepath))
@@ -16,7 +17,7 @@ imp.reload(convert_armature)
 imp.reload(S)
 
 def debug(*args):
-    return
+    # return
     print(" ".join(map(str,args)))
 
 # __import__('code').interact(local={k: v for ns in (globals(), locals()) for k, v in ns.items()})
@@ -53,7 +54,7 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         context.scene.objects.active=who
         who.data.update_tag()
         context.scene.update()
-        bpy.ops.object.mode_set(mode = 'EDIT')
+        bpy.ops.object.mode_set(mode = mode)
         
 
     def execute(self, context):
@@ -72,9 +73,11 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         self.mode_set(context, "SOURCE")
         # print(source.data.edit_bones[0])
         
+        twopi = 2*pi
         self.source_edit_bones = {}
         for k in source.data.bones.keys():
             editbone = source.data.edit_bones[k]
+            editbone.roll = editbone.roll % twopi #this way there are no negative rotations
             self.source_edit_bones[k] = (editbone.name, editbone.roll, editbone.vector.copy())
             # print(k, self.source_edit_bones[k].)
 
@@ -86,12 +89,38 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         basebone = target.data.edit_bones[basebone.name]
         debug("Basebone: ",basebone.name)
 
+        self.source.data.pose_position = "REST"
+        self.source.data.update_tag()
+        context.scene.update()
+
         Armature_converter.walk_bones(basebone, self.simplify)
+
+        self.source.data.pose_position = "POSE"
+        self.mode_set(context, "TARGET", "POSE")
+        self.source.data.update_tag()
+        context.scene.update()
+        debug("***********COPY POSE********")
+        basebone = Armature_converter.get_basebone(self, "target")
+        self.slerps = {}
+        Armature_converter.walk_bones(basebone, self.copy_pose)
 
         ##########################
         # Create empties, axis and (no well orieted) rotation arcs
         ##########################
-        # self.mode_set(context, "Target", "OBJECT")
+        self.mode_set(context, "Target", "OBJECT")
+        # for name, rot in self.slerps.items():
+        #     bpy.ops.object.empty_add(
+        #         location = self.target.matrix_world* self.target.pose.bones[name].matrix.to_translation(), 
+        #         rotation=rot.to_euler(),
+        #         type='ARROWS', radius=0.2)
+
+        for name, m in self.slerps.items():
+            bpy.ops.object.empty_add(
+                location = m.to_translation(), 
+                rotation=m.to_euler(),
+                type='ARROWS', radius=0.2)
+
+
         # for name, empty in self.twists.items():
         #     bpy.ops.object.empty_add(location = self.target.matrix_world* empty[0], rotation=empty[1].to_euler(),
         #         type='ARROWS', radius=0.2)
@@ -105,17 +134,96 @@ class ZP_SimplifyArmature(bpy.types.Operator):
    
 
         return {"FINISHED"}
+    ##########################
+    # Second procedure, to be done on every pose in Pose mode
+    ##########################
 
+    def copy_pose(self, bone):
+        if type(bone) != bpy.types.PoseBone:
+            raise TypeError("function expected a bone of type 'PoseBone', not", type(bone))
+
+        zp_bone = self.prev_state[bone.name]["zp_bone"]
+        if len(zp_bone) > 1:
+            self.pose_multi_bone(bone, zp_bone)
+        else:
+            self.pose_single_bone(bone, zp_bone)
+
+    def pose_multi_bone(self, bone, other_bones):
+        rot_world_space = [o.matrix.copy() for o in other_bones]
+        # first_bone = other_bones[0] 
+        quat = rot_world_space[0].to_quaternion()
+
+        # for o in other_bones:
+        #     self.slerps[o.name] = o.matrix
+
+        # bpy.ops.object.empty_add(location = self.target.matrix_world* other_bones[0]., rotation=empty[1].to_euler(),
+        #                 type='ARROWS', radius=0.2)
+        self.slerps[bone.name] = self.target.convert_space(bone, 
+                                    Matrix(), 
+                                    "LOCAL", "WORLD")
+
+        for rot in rot_world_space[1:]:
+            # other = self.source.pose.bones[b]
+            # first_bone_space.append(self.source.convert_space(first_bone, b.matrix, "POSE", "LOCAL" ))
+            # rot_world_space.append( other_bones.matrix.to_quaternion() )
+            other = rot.to_quaternion()
+            quat = quat.slerp(other, 0.5)
+
+            # quat = quat.slerp(M.to_quaternion(), 0.5)
+    
+        bone.rotation_quaternion = self.target.convert_space(bone, 
+                                    quat.to_matrix().to_4x4(), 
+                                    "POSE", "LOCAL").to_quaternion().copy()
+
+        print("="*10, bone.rotation_quaternion.copy())
+
+        bpy.app.debug_depsgraph = True
+        self.target.data.update_tag()
+        # self.context.scene.update()
+
+        self.target.update_tag({'OBJECT', 'DATA', 'TIME'})
+        self.context.scene.update()
+
+        # self.target.update_from_editmode()
+        bpy.app.debug_depsgraph = False
+        debug("MULTI POSE: %s <---"% bone.name, [a.name for a in other_bones])
+
+
+    def pose_single_bone(self, bone, other_bones):
+        if len(other_bones) == 0 or other_bones[0].name == "":
+            debug(bone.name, "No linked bone")
+            return
+        zp_bname = other_bones[0].name
+        bone.rotation_quaternion = self.source.pose.bones[zp_bname].rotation_quaternion
+
+        debug("SINGLE BONE: %s <---"% bone.name, zp_bname)
+
+    ##########################
+    # Initial procedure, copy pose in edit mode
+    ##########################
     def collect_information(self):
         self.prev_state = {}
         for b in self.target.data.bones:
-             self.prev_state[b.name] = {
-             "head": b.head.copy(), 
-             "tail": b.tail.copy(), 
-             "magnitude": b.vector.magnitude
-             }
+            self.prev_state[b.name] = {
+            "head": b.head.copy(), 
+            "tail": b.tail.copy(), 
+            "magnitude": b.vector.magnitude
+            }
+            
+        for b in self.target.data.edit_bones:
+            others = []
+            for zp in b.zp_bone:
+                others.append(self.source.pose.bones[zp.name])
+            others.sort(key=S.genealogy)
+
+            assert S.verify_chain(others)
+
+            self.prev_state[b.name]["zp_bone"] = others
 
     def simplify(self, bone):
+        if type(bone) != bpy.types.EditBone:
+            raise TypeError("function expected a bone of type 'EditBone', not", type(bone))
+
         magnitudes = {}
         if len(bone.zp_bone) > 1:
             self.do_multi_bone(bone)
@@ -123,13 +231,13 @@ class ZP_SimplifyArmature(bpy.types.Operator):
             self.do_single_bone(bone)
 
     def do_single_bone(self, bone):
-        zp_bname = bone.zp_bone[0].name
-        magnitude = self.prev_state[bone.name]["magnitude"]
-        
-        if len(bone.zp_bone) == 0 or zp_bname == "":
+        if len(bone.zp_bone) == 0 or bone.zp_bone[0].name == "":
             debug(bone.name, "No linked bone")
             return
 
+        zp_bname = bone.zp_bone[0].name
+        magnitude = self.prev_state[bone.name]["magnitude"]
+        
         other = self.source.pose.bones[zp_bname]    
 
         #Get the direction in WORLD Space
@@ -152,12 +260,13 @@ class ZP_SimplifyArmature(bpy.types.Operator):
 
     def do_multi_bone(self, bone):
         magnitude = self.prev_state[bone.name]["magnitude"]
-        others = []
-        for zp in bone.zp_bone:
-            others.append(self.source.pose.bones[zp.name])
-        others.sort(key=S.genealogy)
 
-        assert S.verify_chain(others)
+        others = self.prev_state[bone.name]["zp_bone"]
+        # for zp in bone.zp_bone:
+        #     others.append(self.source.pose.bones[zp.name])
+        # others.sort(key=S.genealogy)
+
+        # assert S.verify_chain(others)
         debug("{:<15}[MULTI] ->{}".format( bone.name, [b.name for b in others]) )
 
         #Get the direction in WORLD Space
