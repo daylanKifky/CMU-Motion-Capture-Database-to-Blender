@@ -1,7 +1,15 @@
 import bpy, bmesh
+from bpy_extras import object_utils
 from mathutils import *
 from functools import cmp_to_key
 
+from os import path
+from sys import path as syspath
+# syspath.append("/usr/lib/python3/dist-packages")
+# from IPython import embed
+
+
+# print(syspath)
 D = bpy.data
 C = bpy.context
 
@@ -33,6 +41,20 @@ def verify_chain(bones):
             return False
     return True
 
+def create_direction_obj(name, location, direction):
+	mesh = bpy.data.meshes.new(name)
+	bm = bmesh.new()
+	v0 = bm.verts.new((0,0,0))
+	v1 = bm.verts.new(direction)
+	bm.edges.new((v0, v1))
+
+	bm.to_mesh(mesh)
+	mesh.update()
+
+	ob = object_utils.object_data_add(bpy.context, mesh, name=name)
+	ob = ob.object
+	if location:
+		ob.location = location
 
 # _zvec = Vector((1,0,0))
 def get_average_twist(bones, direction):
@@ -50,27 +72,34 @@ def get_average_twist(bones, direction):
 	twist = Quaternion( (quat.w, ap.x, ap.y, ap.z)  )
 	twist.normalize()
 
-	print([b.name for b in bones], twist.axis.dot(direction))
+	# print([b.name for b in bones], twist.axis.dot(direction))
+
+	# embed()
 	#__import__('code').interact(local={k: v for ns in (globals(), locals()) for k, v in ns.items()})
 
 	# if twist.axis.dot(_zvec) >= 0:
 	# 	return -twist.angle
 	# else:
-	return twist.angle
+	return twist
 
 def get_average_roll(bones, direction):
 	total_roll = 0
+	direction = direction.copy()
+	direction.normalize()
+	# embed()
 	for b in bones:
-		total_roll += b.roll * direction.dot(b.vector) / len(bones)
+		total_roll += b[1] * direction.dot(b[2].normalized()) / len(bones)
 
 	return total_roll
 
 
 
-def clean_empties():
+def clean_empties(keep):
 	for ob in D.scenes['Scene'].objects:
-			if ob.type == "EMPTY" or ob.type == "MESH":
-				D.scenes['Scene'].objects.unlink(ob)
+		if ob.type in ["EMPTY", "MESH", "CURVE"]:
+			if ob.name in keep:
+				continue
+			D.scenes['Scene'].objects.unlink(ob)
 
 
 def bone_vec_to_world(vec):

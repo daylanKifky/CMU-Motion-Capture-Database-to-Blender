@@ -26,6 +26,8 @@ class ZP_SimplifyArmature(bpy.types.Operator):
     bl_idname = "armature.zpose_simplify"
     bl_label = "Map the pose in a more complex armature to the currently selected"
 
+    twists = {}
+
     @classmethod
     def poll(cls, context):
         return context.object.type == "ARMATURE" and context.object.data.zp_source
@@ -55,6 +57,7 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         
 
     def execute(self, context):
+        S.clean_empties(["X", "S", "Cube"])
         source = self.source = context.object.data.zp_source
         target = self.target = context.object
         
@@ -72,7 +75,7 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         self.source_edit_bones = {}
         for k in source.data.bones.keys():
             editbone = source.data.edit_bones[k]
-            self.source_edit_bones[k] = (editbone.name, editbone.roll)
+            self.source_edit_bones[k] = (editbone.name, editbone.roll, editbone.vector.copy())
             # print(k, self.source_edit_bones[k].)
 
 
@@ -84,6 +87,21 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         debug("Basebone: ",basebone.name)
 
         Armature_converter.walk_bones(basebone, self.simplify)
+
+        ##########################
+        # Create empties, axis and (no well orieted) rotation arcs
+        ##########################
+        # self.mode_set(context, "Target", "OBJECT")
+        # for name, empty in self.twists.items():
+        #     bpy.ops.object.empty_add(location = self.target.matrix_world* empty[0], rotation=empty[1].to_euler(),
+        #         type='ARROWS', radius=0.2)
+
+        #     # curve_rot = Quaternion((1,0,0,0)) * empty[1].conjugated()
+        #     bpy.ops.curve.simple(Simple_Type ="Arc", Simple_startlocation= self.target.matrix_world* empty[0], 
+        #         Simple_angle=empty[1].angle, Simple_degrees_or_radians = "Radians", 
+        #         Simple_rotation_euler = empty[1].to_euler(), Simple_radius=0.1)
+
+        #     S.create_direction_obj(name, self.target.matrix_world* empty[0], empty[1].axis *0.2)
    
 
         return {"FINISHED"}
@@ -143,8 +161,10 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         debug("{:<15}[MULTI] ->{}".format( bone.name, [b.name for b in others]) )
 
         #Get the direction in WORLD Space
-        a = S.bone_vec_to_world(others[0].head)
-        b = S.bone_vec_to_world(others[-1].tail)
+        # a = S.bone_vec_to_world(others[0].head)
+        # b = S.bone_vec_to_world(others[-1].tail)
+        a = others[0].head
+        b = others[-1].tail
         direction = b - a
 
         Mp = self.get_bone_co_pose_space(bone.parent.name, "tip" )
@@ -152,12 +172,15 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         #D.objects["X"].matrix_world = self.target.matrix_world * Mp #* Mhead 
         bone.head = Mp * self.prev_state[bone.name]["head"]
         bone.tail = bone.head + direction.normalized() * magnitude
-        bone.roll = S.get_average_twist(others, direction)
+        
+        #Use average twist, and keep a copy for posterior graphical representation
+        # twist = S.get_average_twist(others, direction)
+        # self.twists[bone.name] = (bone.head.copy(), twist.copy())
+        # bone.roll = twist.angle
+        
+        bone.roll = S.get_average_roll([self.source_edit_bones[b.name] for b in others], direction)
 
         self.target.update_from_editmode()
-        # zp_bname = bone.zp_bone[0].name
-        # magnitude = self.prev_state[bone.name]["magnitude"]
-        # other = self.source.pose.bones[zp_bname]
         
 
     def get_bone_co_pose_space(self, name, tip_or_head):
