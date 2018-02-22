@@ -56,6 +56,17 @@ bpy.types.Armature.zp_clearprev = bpy.props.BoolProperty(name = "Clear previous 
                                 description= "When selected any previous linking will be cleared",
                                 default=False)
 
+root_translation_behaviour = [
+    ("NO", "No translation", "Discard root bone translation", 1),
+    ("BONE", "Keep translation", "Keep root bone translation", 2),
+    ("OBJECT", "To object", "Put root bone translation on object", 3)
+    ]
+
+bpy.types.Armature.zp_roottrans = bpy.props.EnumProperty(items = root_translation_behaviour,
+                                name = "Root translation behaviour",
+                                description= "What to do with the root bone translation",
+                                default="OBJECT")
+
 bpy.types.EditBone.zp_bone = bpy.props.CollectionProperty(type=Bone_Collection )
 bpy.types.Armature.zp_msg = bpy.props.StringProperty() 
 
@@ -76,6 +87,7 @@ class ZP_ArmatureSelectPanel(bpy.types.Panel):
         ob = context.object
         self.layout.prop(ob.data, "zp_clearprev" )
         self.layout.prop(ob.data, "zp_samename", text="Link same-named bones")
+        self.layout.prop(ob.data, "zp_roottrans", expand=True )
 
         col = self.layout.column()
 

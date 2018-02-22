@@ -8,6 +8,9 @@ import zpose_ui
 import convert_armature
 from convert_armature import *
 
+# syspath.append("/usr/lib/python3/dist-packages")
+# from IPython import embed
+
 import simplify_armature as S
 
 import imp
@@ -16,9 +19,34 @@ imp.reload(convert_armature)
 imp.reload(S)
 
 def debug(*args):
-    # return
+    return
     print(" ".join(map(str,args)))
 
+#D.objects['SOURCE'].animation_data.action.fcurves[0].data_path == D.objects['SOURCE'].pose.bones['lumbar1'].path_from_id("location")
+def get_fcurves(owner, prop):
+    id_data = owner.id_data
+    fcurves = []
+    if not id_data.animation_data.action:
+        return None
+
+    for fcurve in id_data.animation_data.action.fcurves:
+        if fcurve.data_path == owner.path_from_id(prop):
+            fcurves.append(fcurve)
+    return fcurves
+
+def get_prop_values_at(owner, prop, index, absolute = False):
+    fcurves = get_fcurves(owner, prop)
+    if not fcurves:
+        return owner.path_resolve(prop)
+
+    fcurves.sort(key = lambda fc: fc.array_index, reverse=False)
+    if absolute:
+        scene_frames = {keypoints.co[0]: i for i,keypoints in enumerate(fcurves[0].keyframe_points)}
+        index = scene_frames[index]
+    result = []
+    for fc in fcurves:
+        result.append(fc.keyframe_points[index].co[1])
+    return result  
 
 
 class ZP_SimplifyArmature(bpy.types.Operator):
@@ -59,12 +87,20 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         
 
     def execute(self, context):
-        S.clean_empties(["X", "S", "Cube"])
+        S.clean_empties(["X", "S", "Cube", "Empty"])
         source = self.source = context.object.data.zp_source
         target = self.target = context.object
         self.frame_initial = context.scene.frame_current
         self.range = {"min" : context.scene.frame_start, "max" : context.scene.frame_end}
-        
+
+        self.target_basebone = Armature_converter.get_basebone(self, "target").name
+        self.target_init_loc = get_prop_values_at(self.target, "location", 0)
+        self.target_init_loc = Vector(self.target_init_loc)
+        self.source_basebone = Armature_converter.get_basebone(self, "source").name
+        self.source_bbone_init_loc = \
+            get_prop_values_at(self.source.pose.bones[self.source_basebone], "location", 0)
+        self.source_bbone_init_loc = Vector(self.source_bbone_init_loc)
+
         debug(" ",  "*"*20, "\n", 
             "Start conversion from {} to {}\n".format(source.name, target.name),
             "*"*20)
@@ -88,8 +124,8 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         self.mode_set(context, "Target")
         self.collect_information()
         #TODO: get_basebone interface sucks!
-        basebone = Armature_converter.get_basebone(self, "target")
-        basebone = target.data.edit_bones[basebone.name]
+        # basebone = Armature_converter.get_basebone(self, "target")
+        basebone = target.data.edit_bones[self.target_basebone]
         debug("Basebone: ",basebone.name)
 
         self.source.data.pose_position = "REST"
@@ -108,7 +144,7 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         self.source.data.update_tag()
         context.scene.update()
         debug("***********COPY POSE********")
-        basebone = Armature_converter.get_basebone(self, "target")
+        basebone = self.target.pose.bones[self.target_basebone]
         self.slerps = {}
         self.copy_pose_bone(basebone)
         self.target.data.update_tag()
@@ -174,11 +210,43 @@ class ZP_SimplifyArmature(bpy.types.Operator):
             if i < self.range["min"]: continue
             if i > self.range["max"]: break
 
-            C.scene.frame_set(keypoint.co[0])
+            self.context.scene.frame_set(keypoint.co[0])
             self.copy_pose_all(basebone)
             self.set_keyframe_target()
 
-        C.scene.frame_set(self.frame_initial)
+            s_basebone = self.source.pose.bones[self.source_basebone]
+
+            #Do Base bone translation
+            if self.target.data.zp_roottrans == "BONE":
+                basebone.location = s_basebone.location
+                self.target.keyframe_insert(\
+                    'pose.bones["'+ basebone.name +'"].location',
+                        index=-1, 
+                        frame=bpy.context.scene.frame_current, 
+                        group=basebone.name)
+
+            #Do object translation
+            elif self.target.data.zp_roottrans == "OBJECT":
+                if not self.target_bbone_init_loc:
+                    self.target_bbone_init_loc = self.target.convert_space(basebone, 
+                        Matrix.Translation(basebone.location), "LOCAL", "WORLD")
+                
+                Mw = self.source.convert_space(s_basebone, 
+                    Matrix.Translation(s_basebone.location), "LOCAL", "WORLD")
+                
+                # displacement = basebone.location - self.source_bbone_init_loc
+                self.target.location = \
+                    self.target_init_loc \
+                    - self.target_bbone_init_loc.to_translation() \
+                    + Mw.to_translation()
+
+                self.target.keyframe_insert(\
+                    'location',
+                        index=-1, 
+                        frame=bpy.context.scene.frame_current, 
+                        group="location")
+
+        self.context.scene.frame_set(self.frame_initial)
 
     def copy_pose_all(self, basebone):
         self.copy_pose_bone(basebone)
@@ -222,9 +290,7 @@ class ZP_SimplifyArmature(bpy.types.Operator):
                                     quat.to_matrix().to_4x4(), 
                                     "POSE", "LOCAL").to_quaternion().copy()
 
-        print("="*10, bone.rotation_quaternion.copy())
-
-        bpy.app.debug_depsgraph = True
+        # bpy.app.debug_depsgraph = True
         self.target.data.update_tag()
         # self.context.scene.update()
 
@@ -232,7 +298,7 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         self.context.scene.update()
 
         # self.target.update_from_editmode()
-        bpy.app.debug_depsgraph = False
+        # bpy.app.debug_depsgraph = False
         debug("MULTI POSE: %s <---"% bone.name, [a.name for a in other_bones])
 
 
