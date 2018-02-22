@@ -3,6 +3,8 @@
 The idea is been able to create an arbitriary armature in blender and then run this script to convert all the animations of the database to this new base pose
 
 ## Screenshots
+![boogie armature](img/boogie_armature.gif)
+
 ![Armature simplyfing](img/Screenshot_2018-02-15_14-33-22.png)
 
 ## Failure Screenshots :sweat_smile:

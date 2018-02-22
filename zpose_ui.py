@@ -32,6 +32,10 @@ def on_zp_source_update(self, context):
         for b in context.object.data.edit_bones:
                 b.zp_bone.clear()
                 b.zp_bone.add()
+    else:
+        for b in context.object.data.edit_bones:
+            if len(b.zp_bone) == 0:
+                b.zp_bone.add()       
 
     if context.object.data.zp_samename:
         bpy.ops.armature.zpose_samename()

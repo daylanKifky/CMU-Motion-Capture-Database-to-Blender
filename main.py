@@ -28,6 +28,7 @@ class ZP_SimplifyArmature(bpy.types.Operator):
     A bone-mapping has to be done from the properties panel before running this operator."""
 
     twists = {}
+    range = {"min" : 0, "max" : float("inf")}
 
     @classmethod
     def poll(cls, context):
@@ -61,6 +62,8 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         S.clean_empties(["X", "S", "Cube"])
         source = self.source = context.object.data.zp_source
         target = self.target = context.object
+        self.frame_initial = context.scene.frame_current
+        self.range = {"min" : context.scene.frame_start, "max" : context.scene.frame_end}
         
         debug(" ",  "*"*20, "\n", 
             "Start conversion from {} to {}\n".format(source.name, target.name),
@@ -107,12 +110,16 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         debug("***********COPY POSE********")
         basebone = Armature_converter.get_basebone(self, "target")
         self.slerps = {}
-        self.copy_pose(basebone)
+        self.copy_pose_bone(basebone)
         self.target.data.update_tag()
         self.target.update_tag({'OBJECT', 'DATA', 'TIME'})
         self.context.scene.update()
 
-        Armature_converter.walk_bones(basebone, self.copy_pose)
+        if self.source.animation_data.action:
+            self.walk_animation(basebone)
+        else:
+            self.copy_pose_all(basebone)
+
 
         ##########################
         # Create empties, axis and (no well orieted) rotation arcs
@@ -147,8 +154,38 @@ class ZP_SimplifyArmature(bpy.types.Operator):
     ##########################
     # Second procedure, to be done on every pose in Pose mode
     ##########################
+    #
+    #
+    def set_keyframe_target(self, what = "rotation_quaternion"):
+        for b in self.target.pose.bones:
+                # print("Setting key to %s"% b.name)
+                self.target.keyframe_insert(\
+                    'pose.bones["'+ b.name +'"].rotation_quaternion',
+                        index=-1, 
+                        frame=bpy.context.scene.frame_current, 
+                        group=b.name)
+        
+    
+    def walk_animation(self, basebone):
+        """Will step on every keyframe of the first fcurve on the source armature. 
+        Assumes the keyframes for all the bones are aligned vertically"""
+        keyframes = self.source.animation_data.action.fcurves[0].keyframe_points
+        for i,keypoint in enumerate(keyframes):
+            if i < self.range["min"]: continue
+            if i > self.range["max"]: break
 
-    def copy_pose(self, bone):
+            C.scene.frame_set(keypoint.co[0])
+            self.copy_pose_all(basebone)
+            self.set_keyframe_target()
+
+        C.scene.frame_set(self.frame_initial)
+
+    def copy_pose_all(self, basebone):
+        self.copy_pose_bone(basebone)
+        Armature_converter.walk_bones(basebone, self.copy_pose_bone)
+
+
+    def copy_pose_bone(self, bone):
         if type(bone) != bpy.types.PoseBone:
             raise TypeError("function expected a bone of type 'PoseBone', not", type(bone))
 

@@ -82,13 +82,29 @@ def get_average_twist(bones, direction):
 	# else:
 	return twist
 
+
+def shortAngleDist(a0,a1):
+    max = pi*2
+    #max = 360
+    da = (a1 - a0) % max
+    return 2*da % max - da
+
+
+def angleLerp(a0,a1,t):
+    return a0 + shortAngleDist(a0,a1)*t
+
+from math import pi
+twopi = pi*2
+
 def get_average_roll(bones, direction):
-	total_roll = 0
+	"""bones is a list of tuples = (name, roll, direction_vector)"""
 	direction = direction.copy()
 	direction.normalize()
+	total_roll = bones[0][1] * direction.dot(bones[0][2].normalized())
 	# embed()
-	for b in bones:
-		total_roll += b[1] * direction.dot(b[2].normalized()) / len(bones)
+	for b in bones[1:]:
+		# total_roll += b[1] * direction.dot(b[2].normalized()) / len(bones)
+		total_roll = angleLerp(total_roll, b[1], direction.dot(b[2].normalized())) % twopi
 
 	return total_roll
 
