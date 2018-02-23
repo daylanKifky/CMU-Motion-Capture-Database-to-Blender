@@ -24,25 +24,122 @@ def debug(*args):
     return
     print(" ".join(map(str,args)))
 
+
+class Progress_manager():
+    def __init__(self, n, wm):
+        self.wm = wm
+        self.tot = 9999
+
+        wm.progress_begin(0, self.tot)
+        self.current = 0
+        self.chunk_len = self.tot / n
+
+    def __del__(self):
+        self.wm.progress_end()
+
+    def get(self,current_n, val):
+        return current_n * self.chunk_len + val * self.chunk_len
+
+    def iget(self,current_n, val):
+        return self.tot - self.get(current_n, val)
+
+    def set(self, val):
+        self.wm.progress_update(int(self.get(self.current, val)))
+
+    def iset(self, val):
+        self.wm.progress_update(int(self.iget(self.current, val)))
+
+
+# from time import sleep
+# def draw(self, context):
+#     self.layout.label("Might take a while, open the console for richer output")
+#     self.layout.operator("armature.zpose_call", icon='BONE_DATA',
+#                          text="Go")
+
+
+# class ZP_launch(bpy.types.Operator):
+#     bl_idname = "armature.zpose_launc"
+#     bl_label = "Launch ZeroPose conversion"
+
+#     @classmethod
+#     def poll(cls, context):
+#         return context.object.type == "ARMATURE" and context.object.data.zp_source
+
+#     def invoke(self, context, event):
+#         # self.execute(context)
+#         wm = context.window_manager
+
+#         wm.popup_menu(draw, title="Confirmation", icon='INFO')
+
+
+#         return {"FINISHED"}
+
+
 class ZP_call_simplify(bpy.types.Operator):
     bl_idname = "armature.zpose_call"
     bl_label = "ZeroPose call simplify"
+    bl_description = """Create an estimation of the source's animations with other armature's Rest Pose.
+    A bone-mapping has to be done from the properties panel before running this operator."""
+
+    _success = "Zpose conversion done"
+    _rot_error = "One of the armatures is rotated and might \
+cause incorrect results. \nClear rotations and try again."
 
     @classmethod
     def poll(cls, context):
         return context.object.type == "ARMATURE" and context.object.data.zp_source
 
+
     def invoke(self, context, event):
-        self.execute(context)
-        return {"FINISHED"}
+        self.prog = Progress_manager(1, context.window_manager)
+        return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
-        mngr = ZS.ZP_armature_manager(context)
-        simplfier = ZS.ZP_simplifier(mngr)
-        simplfier.run()
+        try:
+            mngr = ZS.ZP_armature_manager(context)
+           
+            if not self.check_rotations(context, mngr.target, mngr.source):
+                return {'CANCELLED'}
 
-        animator = ZS.ZP_animation_transfer(mngr)
-        animator.run()
+            if mngr.target.data.orphans != 0:
+                print("orphans")
+                # self.report({"ERROR"}, "orphans!")
+
+            simplfier = ZS.ZP_simplifier(mngr)
+            simplfier.run()
+
+            self.prog.current = 0
+            animator = ZS.ZP_animation_transfer(mngr)
+            animator.run(self.prog)
+            
+        except Exception as e:
+            print("ERROR: ", e)
+            self.report({"ERROR"}, str(e))
+            return {'CANCELLED'}
+
+        self.report({"INFO"}, self._success)
+
+        return {"FINISHED"}
+
+    def check_rotations(self, context, target, source):
+        s_rot = ZPu.get_prop_values_at(source, "matrix_world", 0)
+        t_rot = ZPu.get_prop_values_at(target, "matrix_world", 0)
+
+        q = Quaternion((1,0,0,0))
+        rots = s_rot.to_quaternion().dot(q) + t_rot.to_quaternion().dot(q) 
+
+        if rots < (2- 1e-8):
+            ZPu.mode_set(target, context, "OBJECT")
+            self.report({"ERROR"}, self._rot_error)
+            return False
+        
+        return True
+
+
+    def draw(self, context):
+        layout = self.layout
+        col = layout.column()
+        col.label(text="Might take a while, open the console for complete output..")
 
 
 

@@ -40,7 +40,7 @@ def on_zp_source_update(self, context):
     if context.object.data.zp_samename:
         bpy.ops.armature.zpose_samename()
     
-    bpy.ops.armature.zpose_verify()
+    bpy.ops.armature.zpose_verify("EXEC_DEFAULT")
 
 # def on_zp_bone_update(self, context):
 
@@ -55,6 +55,8 @@ bpy.types.Armature.zp_samename = bpy.props.BoolProperty(name = "Link same-named 
 bpy.types.Armature.zp_clearprev = bpy.props.BoolProperty(name = "Clear previous linking",
                                 description= "When selected any previous linking will be cleared",
                                 default=False)
+
+bpy.types.Armature.orphans = bpy.props.IntProperty()
 
 root_translation_behaviour = [
     ("NO", "No translation", "Discard root bone translation", 1),
@@ -88,7 +90,7 @@ class ZP_ArmatureSelectPanel(bpy.types.Panel):
         self.layout.prop(ob.data, "zp_clearprev" )
         self.layout.prop(ob.data, "zp_samename", text="Link same-named bones")
         self.layout.prop(ob.data, "zp_roottrans", expand=True )
-
+        self.layout.separator()
         col = self.layout.column()
 
         if ob.data.zp_source is None:
@@ -105,6 +107,10 @@ class ZP_ArmatureSelectPanel(bpy.types.Panel):
             box.label("go to the bone tab to complete the setup:")
             box.operator("wm.properties_context_change", icon='BONE_DATA',
                          text="Go to Bone tab...").context = 'BONE'
+
+        self.layout.separator()
+        self.layout.operator("armature.zpose_call", icon='POSE_DATA',
+                         text="Run")
 
 class ZP_BoneSelectPanel(bpy.types.Panel):
     bl_label = "Link ZeroPose Bones"
@@ -171,14 +177,44 @@ class ZP_SameNameLinking(bpy.types.Operator):
 
         return {"FINISHED"}
 
+
+verify_results = set()
+
+def verify_popup(self, context):
+    global verify_results
+    orphans = len(verify_results["target"])
+    row = self.layout.row()
+    if orphans == 0:
+        row.label( "All target bones linked!", icon='COLOR_GREEN' )
+    else:
+        row.label( "Found %d orphan target bones, link all to continue" %orphans, icon='COLOR_RED' )
+    
+
+    col1 = row.column()
+    col2 = row.column()
+    col1.label("Target orphan bones:")
+    for val in verify_results.values():
+        if not val:
+            val.add("<None>")
+
+    for t in verify_results["target"]:
+        col1.label(t , icon="RIGHTARROW_THIN")
+
+    col2.label("Source orphan bones:")
+    for s in verify_results["source"]:
+        col2.label(s , icon="RIGHTARROW_THIN")
+
+
 class ZP_VerifyRelations(bpy.types.Operator):
     bl_idname = "armature.zpose_verify"
     bl_label = "Verify armature ZeroPose relations"
 
+    
 
-    def execute(self, context):
+    def analize(self, context):
         ob = context.object
         source = ob.data.zp_source
+        result ={"source": set(), "target" :set()}
         
         if "fake_bone" in bpy.data.objects.keys():
             custom_bone = bpy.data.objects["fake_bone"] 
@@ -186,15 +222,32 @@ class ZP_VerifyRelations(bpy.types.Operator):
             custom_bone = create_mesh.add_fake_bone(context)
 
         for pb in source.pose.bones:
+            result["source"].add(pb.name)
             pb.custom_shape = None
 
         for b in ob.data.edit_bones:
+            result["target"].add(b.name)
             for i in range(len(b.zp_bone)):
                 name = b.zp_bone[i].name
                 if name in source.data.bones.keys():
-                    # print("set bone ", name)
                     source.pose.bones[name].custom_shape = custom_bone
+                    if name in result["target"]: result["target"].remove(b.name)
+                    if name in result["source"]: result["source"].remove(name) 
+        
+        ob.data.orphans = len(result["target"])
+        return result        
 
+    def invoke(self, context, event):
+        global verify_results
+        verify_results = self.analize(context)
+        wm = context.window_manager
+        wm.popup_menu(verify_popup, title="Verification Result", icon="FILE_TICK")
+        
+        return {"FINISHED"} 
+
+    def execute(self, context):
+        self.analize(context)
+        # print(result)
         return {"FINISHED"}    
 
 class ZP_AddBone(bpy.types.Operator):
