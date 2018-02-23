@@ -48,6 +48,61 @@ def get_prop_values_at(owner, prop, index, absolute = False):
         result.append(fc.keyframe_points[index].co[1])
     return result  
 
+from time import sleep
+class SimpleConfirmOperator(bpy.types.Operator):
+    """Really?"""
+    bl_idname = "armature.zpose_confirm_rotated"
+    bl_label = "This operator doesn't work well on rotated armatures, continue anyway?"
+    bl_options = {'REGISTER'}#{'REGISTER', 'INTERNAL'}
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def execute(self, context):
+        # self.report({'WARNING'}, "Applying zpose conversion on rotated armatures")
+        # self.wm = bpy.context.window_manager
+        # tot = 100
+        # for i in range(tot):
+        #     self.wm.progress_update(i)
+        #     sleep(0.01)
+        # self.wm.progress_end()
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        self.wm = bpy.context.window_manager
+
+        # progress from [0 - 1000]
+        # tot = 100
+        # self.wm.progress_begin(0, tot)
+        self.execute(context)
+        # return {"FINISHED"}
+        return context.window_manager.invoke_confirm(self, event)
+
+class repeatOperator(bpy.types.Operator):
+    """Really?"""
+    bl_idname = "armature.zpose_repeat"
+    bl_label = "repeat_call"
+    bl_options = {'REGISTER'}#{'REGISTER', 'INTERNAL'}
+
+    num = 0
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def execute(self, context):
+        self.report({'INFO'}, "call # %d"% self.num)
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        print("invoke repeat, number:", self.num)
+        self.report({'INFO'}, "call # %d"% self.num)
+        if self.num < 3:
+            self.num += 1
+            bpy.ops.armature.zpose_confirm_rotated('INVOKE_DEFAULT')
+        return context.window_manager.invoke_confirm(self, event)
+
 
 class ZP_SimplifyArmature(bpy.types.Operator):
     bl_idname = "armature.zpose_simplify"
@@ -63,6 +118,23 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         return context.object.type == "ARMATURE" and context.object.data.zp_source
 
     def invoke(self, context, event):
+        self.wm = bpy.context.window_manager
+        self.source = context.object.data.zp_source
+        self.target = context.object
+        self.frame_initial = context.scene.frame_current
+        self.range = {"min" : context.scene.frame_start, "max" : context.scene.frame_end}
+        # progress from [0 - 1000]
+        tot = len(self.source.animation_data.action.fcurves[0].keyframe_points)
+        print("TOTAL OF %d keyframes" % tot)
+        print("RANGE", self.range)
+         
+        self.wm.progress_begin(0, tot)
+        # for i in range(tot):
+        #     self.wm.progress_update(i)
+        #     sleep(0.1)
+        # self.wm.progress_end()
+        
+
         self.execute(context)
         return {"FINISHED"}
 
@@ -87,15 +159,33 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         
 
     def execute(self, context):
+
+        # context.window_manager.progress_begin(0, 1)
+        # context.window_manager.progress_update(0.5)
         S.clean_empties(["X", "S", "Cube", "Empty"])
         source = self.source = context.object.data.zp_source
         target = self.target = context.object
-        self.frame_initial = context.scene.frame_current
-        self.range = {"min" : context.scene.frame_start, "max" : context.scene.frame_end}
+        target.animation_data_clear()
+        target.animation_data_create()
+
+        # print("response", res)
+        # return {'FINISHED'}
+
+        s_rot = get_prop_values_at(source, "rotation_quaternion", 0)
+        t_rot = get_prop_values_at(target, "rotation_quaternion", 0)
+
+        if s_rot != [1,0,0,0] or t_rot != [1,0,0,0]:
+            pass 
+            # res = bpy.ops.armature.zpose_confirm_rotated('INVOKE_DEFAULT')
+        #     self.report({'ERROR'}, "YES!")
+
+        
 
         self.target_basebone = Armature_converter.get_basebone(self, "target").name
         self.target_init_loc = get_prop_values_at(self.target, "location", 0)
         self.target_init_loc = Vector(self.target_init_loc)
+
+
         self.source_basebone = Armature_converter.get_basebone(self, "source").name
         self.source_bbone_init_loc = \
             get_prop_values_at(self.source.pose.bones[self.source_basebone], "location", 0)
@@ -156,7 +246,7 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         else:
             self.copy_pose_all(basebone)
 
-
+        self.wm.progress_end()
         ##########################
         # Create empties, axis and (no well orieted) rotation arcs
         ##########################
@@ -207,10 +297,13 @@ class ZP_SimplifyArmature(bpy.types.Operator):
         Assumes the keyframes for all the bones are aligned vertically"""
         keyframes = self.source.animation_data.action.fcurves[0].keyframe_points
         for i,keypoint in enumerate(keyframes):
-            if i < self.range["min"]: continue
-            if i > self.range["max"]: break
-
+            
             self.context.scene.frame_set(keypoint.co[0])
+            if self.context.scene.frame_current < self.range["min"]: continue
+            if self.context.scene.frame_current > self.range["max"]: break
+
+            self.wm.progress_update(i) 
+
             self.copy_pose_all(basebone)
             self.set_keyframe_target()
 
@@ -227,10 +320,12 @@ class ZP_SimplifyArmature(bpy.types.Operator):
 
             #Do object translation
             elif self.target.data.zp_roottrans == "OBJECT":
-                if not self.target_bbone_init_loc:
+                if not hasattr(self, "target_bbone_init_loc"):
                     self.target_bbone_init_loc = self.target.convert_space(basebone, 
                         Matrix.Translation(basebone.location), "LOCAL", "WORLD")
                 
+                # D.objects["Empty"].matrix_world = self.target_bbone_init_loc 
+
                 Mw = self.source.convert_space(s_basebone, 
                     Matrix.Translation(s_basebone.location), "LOCAL", "WORLD")
                 
@@ -238,6 +333,7 @@ class ZP_SimplifyArmature(bpy.types.Operator):
                 self.target.location = \
                     self.target_init_loc \
                     - self.target_bbone_init_loc.to_translation() \
+                    + self.target_init_loc \
                     + Mw.to_translation()
 
                 self.target.keyframe_insert(\
