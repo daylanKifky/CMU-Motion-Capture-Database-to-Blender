@@ -123,6 +123,7 @@ class ZP_BoneSelectPanel(bpy.types.Panel):
         return context.object.type == "ARMATURE" 
 
     def draw(self, context):
+        self.layout.prop(context.object.data, "orphans", text="")
         if context.mode == 'EDIT_ARMATURE':
             self.draw_menu(context)
         else:
@@ -204,6 +205,12 @@ def verify_popup(self, context):
     for s in verify_results["source"]:
         col2.label(s , icon="RIGHTARROW_THIN")
 
+# class color_bones():
+#     cache = {}
+
+#     def get():
+        
+
 
 class ZP_VerifyRelations(bpy.types.Operator):
     bl_idname = "armature.zpose_verify"
@@ -216,24 +223,41 @@ class ZP_VerifyRelations(bpy.types.Operator):
         source = ob.data.zp_source
         result ={"source": set(), "target" :set()}
         
-        if "fake_bone" in bpy.data.objects.keys():
-            custom_bone = bpy.data.objects["fake_bone"] 
-        else:
-            custom_bone = create_mesh.add_fake_bone(context)
+
 
         for pb in source.pose.bones:
             result["source"].add(pb.name)
             pb.custom_shape = None
 
+        if ob.mode != "EDIT": #TODO POLL!
+            raise LookupError("Armature must be in EDIT_MODE verify links")
+        
+        zp_bones = {}
         for b in ob.data.edit_bones:
-            result["target"].add(b.name)
-            for i in range(len(b.zp_bone)):
-                name = b.zp_bone[i].name
+            others = []
+            for zp in b.zp_bone:
+                others.append(zp.name)
+
+            zp_bones[b.name] = others
+
+        for t_name,zps in zp_bones.items():
+            
+            if create_mesh.prefix+t_name in bpy.data.objects.keys():
+                custom_bone = bpy.data.objects[create_mesh.prefix+t_name] 
+            else:
+                custom_bone = create_mesh.add_colored_bone( t_name )
+
+            result["target"].add(t_name)
+            
+            for name in zps:
+                # name = szp[i].name
+                ob.pose.bones[t_name].custom_shape = custom_bone
                 if name in source.data.bones.keys():
                     source.pose.bones[name].custom_shape = custom_bone
-                    if name in result["target"]: result["target"].remove(b.name)
+                    if t_name in result["target"]: result["target"].remove(t_name)
                     if name in result["source"]: result["source"].remove(name) 
         
+        print(result["target"])
         ob.data.orphans = len(result["target"])
         return result        
 

@@ -101,9 +101,13 @@ cause incorrect results. \nClear rotations and try again."
             if not self.check_rotations(context, mngr.target, mngr.source):
                 return {'CANCELLED'}
 
+
+            # TODO: subrotutine for orphans, and check verification algorithm!q
             if mngr.target.data.orphans != 0:
+                ZPu.mode_set(mngr.target, mngr.context, "OBJECT")
                 print("orphans")
-                # self.report({"ERROR"}, "orphans!")
+                self.report({"ERROR"}, "orphans!")
+                return {'CANCELLED'}
 
             simplfier = ZS.ZP_simplifier(mngr)
             simplfier.run()

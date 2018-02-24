@@ -233,8 +233,11 @@ def get_prop_values_at(owner, prop, index, absolute = False):
         result.append(fc.keyframe_points[index].co[1])
     return result 
 
-def mode_set(who, context = bpy.context, mode="EDIT"):
+def mode_set(who = bpy.context.object, context = bpy.context, mode="EDIT"):
     # debug("Mode set {} of {}".format(mode, who))
+    if not bpy.ops.object.mode_set.poll():
+    	return False
+
     bpy.ops.object.mode_set(mode = 'OBJECT')
     if mode == "OBJECT": return
 
@@ -255,7 +258,7 @@ def mode_set(who, context = bpy.context, mode="EDIT"):
     who.data.update_tag()
     context.scene.update()
     bpy.ops.object.mode_set(mode = mode)
-
+    return True
 
 def enter_edit_mode(ob):
 	bpy.ops.object.mode_set(mode = 'OBJECT')

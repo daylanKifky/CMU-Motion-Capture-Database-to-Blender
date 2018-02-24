@@ -1,5 +1,6 @@
 import bpy
 from mathutils import *
+from os import path
 from sys import path as syspath
 syspath.append(path.dirname(bpy.data.filepath))
 import zpose_utils as ZPu
