@@ -194,7 +194,7 @@ class ZP_animation_transfer():
 	
 		bone.rotation_quaternion = target.convert_space(bone, 
 									quat.to_matrix().to_4x4(), 
-									"POSE", "LOCAL").to_quaternion().copy()
+									"WORLD", "LOCAL").to_quaternion().copy()
 
 
 		target.data.update_tag()
@@ -207,9 +207,12 @@ class ZP_animation_transfer():
 		if len(other_bones) == 0 or other_bones[0].name == "":
 			debug(bone.name, "No linked bone")
 			return
+		target = self.mngr.target
 		zp_bname = other_bones[0].name
-        # Mw = 
-		bone.rotation_quaternion = self.mngr.source.pose.bones[zp_bname].rotation_quaternion
+		Mw = self.mngr.source.pose.bones[zp_bname].matrix
+		bone.rotation_quaternion = target.convert_space(bone, 
+									Mw, 
+									"WORLD", "LOCAL").to_quaternion().copy()
 
 		debug("SINGLE BONE: %s <---"% bone.name, zp_bname)
 

@@ -4,8 +4,12 @@ The idea is been able to create an arbitriary armature in blender and then run t
 
 ## Screenshots
 ![boogie armature](img/boogie_armature.gif)
+![boogie armature](img/dance_armature.gif)
+
+![Armature simplyfing](img/Screenshot_2018-02-25_11-51-46.png)
 
 ![Armature simplyfing](img/Screenshot_2018-02-15_14-33-22.png)
+
 
 ## Failure Screenshots :sweat_smile:
 ![Armature simplyfing](img/Screenshot_2018-02-05_11-50-57.png)
