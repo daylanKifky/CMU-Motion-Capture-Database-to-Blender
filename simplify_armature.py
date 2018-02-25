@@ -1,9 +1,15 @@
 import bpy
 from mathutils import *
+from math import pi
 from os import path
 from sys import path as syspath
 syspath.append(path.dirname(bpy.data.filepath))
 import zpose_utils as ZPu
+
+
+def debug(*args):
+	return
+	print(" ".join(map(str,args)))
 
 class ZP_armature_manager():
 	def __init__(self, context):
@@ -65,7 +71,8 @@ class ZP_armature_manager():
 		for b in self.target.data.edit_bones:
 			others = []
 			for zp in b.zp_bone:
-				others.append(self.source.pose.bones[zp.name])
+				if zp.name in self.source.pose.bones.keys():
+					others.append(self.source.pose.bones[zp.name])
 			others.sort(key=ZPu.genealogy)
 
 			assert ZPu.verify_chain(others)
@@ -201,6 +208,7 @@ class ZP_animation_transfer():
 			debug(bone.name, "No linked bone")
 			return
 		zp_bname = other_bones[0].name
+        # Mw = 
 		bone.rotation_quaternion = self.mngr.source.pose.bones[zp_bname].rotation_quaternion
 
 		debug("SINGLE BONE: %s <---"% bone.name, zp_bname)

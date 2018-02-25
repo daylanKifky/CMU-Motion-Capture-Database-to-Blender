@@ -74,7 +74,7 @@ class Progress_manager():
 
 #         return {"FINISHED"}
 
-
+from traceback import print_exc
 class ZP_call_simplify(bpy.types.Operator):
     bl_idname = "armature.zpose_call"
     bl_label = "ZeroPose call simplify"
@@ -117,7 +117,7 @@ cause incorrect results. \nClear rotations and try again."
             animator.run(self.prog)
             
         except Exception as e:
-            print("ERROR: ", e)
+            print("ERROR: ", e ,"\n", print_exc())
             self.report({"ERROR"}, str(e))
             return {'CANCELLED'}
 

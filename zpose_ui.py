@@ -173,8 +173,11 @@ class ZP_SameNameLinking(bpy.types.Operator):
 
         if source:
             for b in ob.data.edit_bones:
+                print(b.name, len(b.zp_bone))
                 if b.name in source.data.bones.keys():
-                    b.zp_bone[""].name = b.name
+                    if b.name not in b.zp_bone.keys(): 
+                        b.zp_bone[""].name = b.name
+                    
 
         return {"FINISHED"}
 
@@ -222,8 +225,6 @@ class ZP_VerifyRelations(bpy.types.Operator):
         ob = context.object
         source = ob.data.zp_source
         result ={"source": set(), "target" :set()}
-        
-
 
         for pb in source.pose.bones:
             result["source"].add(pb.name)
@@ -245,7 +246,7 @@ class ZP_VerifyRelations(bpy.types.Operator):
             if create_mesh.prefix+t_name in bpy.data.objects.keys():
                 custom_bone = bpy.data.objects[create_mesh.prefix+t_name] 
             else:
-                custom_bone = create_mesh.add_colored_bone( t_name )
+                custom_bone = create_mesh.add_colored_bone( t_name, context )
 
             result["target"].add(t_name)
             
@@ -257,7 +258,7 @@ class ZP_VerifyRelations(bpy.types.Operator):
                     if t_name in result["target"]: result["target"].remove(t_name)
                     if name in result["source"]: result["source"].remove(name) 
         
-        print(result["target"])
+        # print(result["target"])
         ob.data.orphans = len(result["target"])
         return result        
 

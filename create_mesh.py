@@ -19,10 +19,33 @@ D = bpy.data
 
 remove_fake_from_scene = False
 
-palette={"0xe41a1c","0x377eb8","0x4daf4a","0x984ea3",
-"0xff7f00","0xffff33","0xa65628","0xf781bf","0x999999"}
+#from: https://bl.ocks.org/mbostock/5577022
+# see also :https://blog.graphiq.com/finding-the-right-color-palettes-for-data-visualizations-fcd4e707a283
+# palette={"0xe41a1c","0x377eb8","0x4daf4a","0x984ea3",
+# "0xff7f00","0xffff33","0xa65628","0xf781bf","0x999999"}
 
-# palette = {"000000"}
+palette = {	"#084081",
+			"#FF7F00",
+			"#49006A",
+			"#F781BF",
+			"#3F007D",
+			"#67001F",
+			"#006C40",
+			"#662506",
+			"#3F007D",
+			"#E41A1C",
+			"#377EB8",
+			"#001D70",
+			"#8A0029",
+			"#4DAF4A",
+			"#5C1E00",
+			"#984EA3",
+			"#001D70",
+			"#FF7F00",
+			"#8A0029",
+			"#E6AB02",
+			"#A65628",
+			"#E7298A"}
 
 def set_active(context, ob):
 	bpy.ops.object.mode_set(mode = 'OBJECT')
@@ -43,7 +66,7 @@ def add_fake_bone(context = bpy.context, filename='custom_bone.json',
 					layers =  (False,) * 19 + (True,),
 					name = prefix, mat=None ):
 	
-	print(name, color)
+	# print(name, color)
 
 	prev_ob = context.object
 	ZPu.mode_set(prev_ob, context, mode="OBJECT")
@@ -79,7 +102,7 @@ def add_fake_bone(context = bpy.context, filename='custom_bone.json',
 
 	#Create Object
 	from bpy_extras import object_utils
-	ob = object_utils.object_data_add(bpy.context, mesh, name=name)
+	ob = object_utils.object_data_add(bpy.context, mesh, name=prefix+name)
 	ob = ob.object
 	ob.layers = layers
 
@@ -139,8 +162,7 @@ def add_fake_bone(context = bpy.context, filename='custom_bone.json',
 import pdb
 
 from random import choice
-def add_colored_bone(bone_name):
-	context = bpy.context
+def add_colored_bone(bone_name, context):
 	mats = [k for k in bpy.data.materials.keys() if k.endswith(mat_sufix)]
 	material = None
 	c = None
@@ -152,9 +174,6 @@ def add_colored_bone(bone_name):
 			c = palette.pop()
 	else:	
 		material = bpy.data.materials[choice(mats)]
-		print (material)
-
-
 
 	return add_fake_bone(context, name=bone_name, color=c, mat=material)
 
